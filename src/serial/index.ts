@@ -4,3 +4,5 @@ export * from './parser';
 export * from './manager';
 export * from './image-processor';
 export * from './image-manager';
+export * from './log-processor';
+export * from './log-manager';
