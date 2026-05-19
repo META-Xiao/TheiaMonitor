@@ -41,16 +41,9 @@ pc-host/
 ### 快速开始
 
 ```bash
-# 安装依赖
 npm install
-
-# 开发
 npm run dev
-
-# 测试
 npm run test
-
-# 构建
 npm run build
 ```
 
