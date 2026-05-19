@@ -7,8 +7,8 @@ import {
   ImageFrame,
   LogFrame,
   ResourceFrame,
-} from '../serial/protocol';
-import { FrameParser, FrameParseError } from '../serial/parser';
+} from '../protocol';
+import { FrameParser, FrameParseError } from '../parser';
 
 describe('Protocol', () => {
   describe('Checksum', () => {

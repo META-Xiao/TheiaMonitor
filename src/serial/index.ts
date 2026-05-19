@@ -2,3 +2,5 @@ export * from './protocol';
 export * from './port';
 export * from './parser';
 export * from './manager';
+export * from './image-processor';
+export * from './image-manager';

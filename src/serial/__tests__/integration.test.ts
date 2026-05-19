@@ -5,8 +5,8 @@ import {
   ImageFrame,
   LogFrame,
   ResourceFrame,
-} from '../serial/protocol';
-import { FrameParser, FrameParseError } from '../serial/parser';
+} from '../protocol';
+import { FrameParser, FrameParseError } from '../parser';
 
 /**
  * 集成测试：模拟真实的 MCU 通信场景
