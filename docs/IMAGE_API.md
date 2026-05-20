@@ -22,7 +22,7 @@ constructor(config: ImageProcessingConfig)
 **参数:**
 - `config.imageWidth` - 图像宽度（默认 188 像素）
 - `config.imageHeight` - 图像高度（默认 120 像素）
-- `config.fps` - 帧率显示值（默认 25）
+- `config.fps` - 默认输出帧率（默认 25，用于配置，非帧头字段）
 
 ### 方法
 
@@ -270,7 +270,7 @@ type ImageProcessEvent =
 | 属性 | 类型 | 说明 |
 |------|------|------|
 | frameId | number | 帧 ID (0-65535) |
-| fps | number | 帧率值 |
+| fpsOut | number | 输出帧率（来自帧头 FPS_out 字段，固定25） |
 | width | number | 图像宽度（像素） |
 | height | number | 图像高度（像素） |
 | pixelData | Uint8ClampedArray | RGBA 格式像素数据（22560 × 4 = 90240 字节） |
