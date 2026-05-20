@@ -65,9 +65,9 @@ const strokeOffset = computed(() => {
   return circumference.value * (1 - progress)
 })
 
-const backgroundColor = '#1a3a52'
+const backgroundColor = '#edf0e8'
 
-// 动画更新值 - 使用 requestAnimationFrame 替代 anime.js
+// 动画更新值 - 使用 requestAnimationFrame
 const animateValue = (newVal: number) => {
   const startValue = displayValue.value
   const duration = 600
