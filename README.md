@@ -1,6 +1,6 @@
 ## Trace-Vector-PChost
 
-[仍在开发！]
+[未开发完成！]
 
 针对21届智能车雁过留痕组STC调试专用的上位机，使用混合编码和 WebSerial API 与 STC32G144K 智能车进行串口通信。能够一次显示更多的调试信息，比逐飞的上位机更完善。
 
@@ -72,7 +72,7 @@ npm run build
   - [x] 日志帧解析
   - [x] 缓冲管理和搜索
   - [x] 统计信息
-  - [ ] 日志窗口 UI (Vue 组件)
+  - [x] 日志窗口 UI (Vue 组件)
   - [ ] 实时滚动和清空按钮
 
 - [x] **Step 4** - 资源仪表板 (0xEE, 311 LOC, 29 tests)
@@ -81,7 +81,7 @@ npm run build
   - [x] 速度和舵机角度处理
   - [x] 数据缓冲和统计
   - [x] 时间范围查询
-  - [ ] 仪表盘 UI (Vue 组件)
+  - [x] 仪表盘 UI (Vue 组件)
   - [ ] 图表显示
 
 - [x] **Step 5** - UI/UX 完整实现（进行中）
@@ -91,13 +91,15 @@ npm run build
     - [x] Display — 主题/FPS/缩放/语言
     - [x] Channels — 三路遥测开关（0xCC/0xDD/0xEE）
     - [x] About — 版本信息
-  - [ ] ImageViewer.vue 图像显示（Canvas 组件）
-  - [ ] LogConsole.vue 日志控制台
-  - [ ] ResourceMonitor.vue 资源监控仪表板
+  - [x] ImageViewer.vue 图像显示（Canvas 组件）
+  - [x] LogConsole.vue 日志控制台
+  - [x] ResourceMonitor.vue 资源监控仪表板
 
 ### 文档
 
-- [SERIAL_LAYER.md](SERIAL_LAYER.md) - 通信层完整文档
+- [资源显示文档](docs\RESOURCE_API.md) - 资源帧解析和显示
+- [图传文档](docs\IMAGE_API.md) - 图传帧解析和显示
+- [日志文档](docs\LOG_API.md) - 日志帧解析和显示
 - [示例代码](src/serial/examples.ts) - 7个实现示例
 
 
