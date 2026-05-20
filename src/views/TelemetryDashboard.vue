@@ -136,6 +136,23 @@
 
     <SettingsView v-show="activeTab === 2" />
     <main v-show="activeTab === 1" class="empty">{{ tabs[1] }} 页面建设中</main>
+
+    <!-- 移动端底部导航 -->
+    <nav class="bottom-nav">
+      <b class="logo-m">✦</b>
+      <div class="bottom-tabs">
+        <button
+          v-for="(tab, i) in tabs"
+          :key="tab"
+          :class="{ on: activeTab === i }"
+          @click="activeTab = i"
+        >
+          <span class="tab-icon">{{ tabIcons[i] }}</span>
+          <span class="tab-label">{{ tab }}</span>
+        </button>
+      </div>
+      <div class="avatar-m">TV</div>
+    </nav>
   </div>
 </template>
 
@@ -144,6 +161,7 @@ import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 import SettingsView from "./SettingsView.vue";
 
 const tabs = ["总览", "图传", "设置"];
+const tabIcons = ["◈", "⊡", "⚙"];
 const activeTab = ref(0);
 const imageCanvas = ref<HTMLCanvasElement>();
 let timerId: number | undefined;
@@ -254,12 +272,16 @@ onUnmounted(() => {
   font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif;
   background: var(--bg);
 }
+/* ── 顶部导航过渡 ── */
 .nav {
   height: 58px;
   padding: 10px 28px;
   display: flex;
   align-items: center;
   gap: 22px;
+  transition:
+    transform 300ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 300ms ease;
 }
 .logo {
   font-size: 24px;
@@ -271,6 +293,7 @@ onUnmounted(() => {
   border-radius: 999px;
   background: var(--nav-tab-bg);
   backdrop-filter: blur(18px);
+  transition: background 200ms;
 }
 .tabs button {
   border: 0;
@@ -280,6 +303,10 @@ onUnmounted(() => {
   color: var(--text-muted);
   font-weight: 800;
   cursor: pointer;
+  transition:
+    background 200ms,
+    color 200ms,
+    box-shadow 200ms;
 }
 .tabs button.on {
   color: var(--text);
@@ -296,6 +323,77 @@ onUnmounted(() => {
   background: var(--nav-tab-active);
   font-weight: 900;
   box-shadow: 0 12px 34px rgba(33, 58, 75, 0.12);
+}
+
+/* ── 底部导航（移动端） ── */
+.bottom-nav {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 200;
+  height: 64px;
+  padding: 0 20px;
+  align-items: center;
+  background: var(--card-bg);
+  border-top: 1px solid var(--card-border);
+  backdrop-filter: blur(24px);
+  transform: translateY(100%);
+  transition: transform 350ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.logo-m {
+  font-size: 22px;
+  flex-shrink: 0;
+}
+.bottom-tabs {
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  gap: 4px;
+}
+.bottom-tabs button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 18px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+  transition:
+    background 200ms,
+    color 200ms,
+    transform 150ms;
+}
+.bottom-tabs button.on {
+  color: #20b8a6;
+  background: rgba(32, 184, 166, 0.12);
+}
+.bottom-tabs button:active {
+  transform: scale(0.92);
+}
+.tab-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+.tab-label {
+  font-size: 10px;
+}
+.avatar-m {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--nav-tab-active);
+  font-weight: 900;
+  font-size: 12px;
+  flex-shrink: 0;
 }
 .main {
   padding: 0 28px 72px;
@@ -572,6 +670,7 @@ h1 {
 @media (max-width: 1280px) {
   .content-layout {
     grid-template-columns: 1fr;
+    transition: grid-template-columns 300ms ease;
   }
   .telemetry-card {
     height: auto;
@@ -588,6 +687,7 @@ h1 {
     width: auto;
   }
 }
+
 @media (max-width: 760px) {
   .nav {
     padding: 12px;
@@ -613,6 +713,81 @@ h1 {
   }
   .pc-log-card {
     width: auto;
+  }
+}
+
+/* ── 移动端：底部导航接管 ── */
+@media (max-width: 640px) {
+  /* 顶部 nav 滑出 */
+  .nav {
+    transform: translateY(-100%);
+    opacity: 0;
+    pointer-events: none;
+    position: absolute;
+  }
+
+  /* 底部 nav 滑入 */
+  .bottom-nav {
+    display: flex;
+    transform: translateY(0);
+  }
+
+  /* 页面内容留出底部空间 */
+  .page {
+    padding-bottom: 64px;
+  }
+  .main {
+    padding: 16px 14px 8px;
+  }
+  .empty {
+    min-height: calc(100vh - 64px);
+  }
+
+  /* 卡片适配 */
+  .telemetry-card {
+    height: auto;
+    grid-template-columns: 1fr;
+    padding: 12px;
+  }
+  /* telemetry-zone 变单列，内部各区块重排 */
+  .telemetry-zone {
+    grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  /* 第一行：CPU RAM ROM 三列 */
+  .resource-stack {
+    display: grid;
+    grid-template-rows: unset;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .resource-card .mini-chart {
+    min-height: 48px;
+  }
+  /* 第二行：Speed + Servo 两列 */
+  .motion-stack {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    padding-top: 0;
+    gap: 8px;
+  }
+  .speed-card {
+    height: auto;
+  }
+  .speed-chart {
+    height: 80px;
+  }
+  .attitude-card {
+    margin-top: 0;
+  }
+  .vision-pane,
+  .mcu-card {
+    height: 280px;
+  }
+  h1 {
+    font-size: clamp(24px, 7vw, 36px);
   }
 }
 </style>
