@@ -60,10 +60,36 @@ npm run build
   - [x] 帧长度解析
   - [x] 校验和验证
   
-- [x] **Step 2** - 图传解析与显示 (0xCC)
-- [x] **Step 3** - 日志显示 (0xDD)
-- [ ] **Step 4** - 资源仪表板 (0xEE)
+- [x] **Step 2** - 图传解析与显示 (0xCC, 239 LOC)
+  - [x] 灰度图转 RGBA 格式
+  - [x] 帧缓冲管理
+  - [x] 丢帧检测和统计
+  - [x] 实时 FPS 计算
+  - [ ] Canvas 显示 (Vue 组件)
+  - [ ] 图像缩放和信息显示
+
+- [x] **Step 3** - 日志显示 (0xDD, 190 LOC)
+  - [x] 日志帧解析
+  - [x] 缓冲管理和搜索
+  - [x] 统计信息
+  - [ ] 日志窗口 UI (Vue 组件)
+  - [ ] 实时滚动和清空按钮
+
+- [x] **Step 4** - 资源仪表板 (0xEE, 311 LOC, 29 tests)
+  - [x] 资源帧解析
+  - [x] CPU/RAM 占用率管理
+  - [x] 速度和舵机角度处理
+  - [x] 数据缓冲和统计
+  - [x] 时间范围查询
+  - [ ] 仪表盘 UI (Vue 组件)
+  - [ ] 图表显示
+
 - [ ] **Step 5** - UI/UX 完整实现
+  - [ ] TelemetryDashboard.vue 主仪表板
+  - [ ] ImageViewer.vue 图像显示
+  - [ ] LogConsole.vue 日志控制台
+  - [ ] ResourceMonitor.vue 资源监控
+  - [ ] 主题和响应式设计
 
 ### 文档
 
