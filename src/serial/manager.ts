@@ -163,6 +163,13 @@ export class TelemetrySerialManager {
   }
 
   /**
+   * 公开方法：分发事件（用于测试）
+   */
+  emit(event: SerialEvent): void {
+    this.emitEvent(event);
+  }
+
+  /**
    * 私有方法：分发事件
    */
   private emitEvent(event: SerialEvent): void {

@@ -6,3 +6,5 @@ export * from './image-processor';
 export * from './image-manager';
 export * from './log-processor';
 export * from './log-manager';
+export * from './resource-processor';
+export * from './resource-manager';
