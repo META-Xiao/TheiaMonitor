@@ -167,7 +167,7 @@ const baudRates = [9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600]
 const serial = reactive({ channel: 'usb_cdc', port: '', baud: 115200, wifiHost: '192.168.4.1', wifiPort: 8080, connected: false })
 const display = reactive({ theme: 'light', fpsCap: 30, canvasScale: 1, lang: 'zh' })
 const channels = reactive([
-  { id: 'image',    name: 'Image Stream',      desc: '0xCC · 22570 B/frame · 25 FPS', enabled: true },
+  { id: 'image',    name: 'Image Stream',      desc: '0xCC · 22566 B/frame · 25 FPS', enabled: true },
   { id: 'log',      name: 'Log Stream',        desc: '0xDD · variable length · 5 FPS', enabled: true },
   { id: 'resource', name: 'Resource Monitor',  desc: '0xEE · 18 B/frame · 5 FPS',    enabled: true },
 ])
