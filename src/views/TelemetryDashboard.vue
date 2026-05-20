@@ -70,12 +70,14 @@
       </section>
     </main>
 
-    <main v-show="activeTab !== 0" class="empty">{{ tabs[activeTab] }} 页面建设中</main>
+    <SettingsView v-show="activeTab === 2" />
+    <main v-show="activeTab === 1" class="empty">{{ tabs[1] }} 页面建设中</main>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import SettingsView from './SettingsView.vue'
 
 const tabs = ['总览', '图传', '设置']
 const activeTab = ref(0)

@@ -84,12 +84,16 @@ npm run build
   - [ ] 仪表盘 UI (Vue 组件)
   - [ ] 图表显示
 
-- [ ] **Step 5** - UI/UX 完整实现
-  - [ ] TelemetryDashboard.vue 主仪表板
-  - [ ] ImageViewer.vue 图像显示
+- [x] **Step 5** - UI/UX 完整实现（进行中）
+  - [x] TelemetryDashboard.vue 主仪表板（总览页）
+  - [x] SettingsView.vue 设置页（左侧导航+右侧内容，响应式）
+    - [x] Serial Connection — 串口配置和连接状态
+    - [x] Display — 主题/FPS/缩放/语言
+    - [x] Channels — 三路遥测开关（0xCC/0xDD/0xEE）
+    - [x] About — 版本信息
+  - [ ] ImageViewer.vue 图像显示（Canvas 组件）
   - [ ] LogConsole.vue 日志控制台
-  - [ ] ResourceMonitor.vue 资源监控
-  - [ ] 主题和响应式设计
+  - [ ] ResourceMonitor.vue 资源监控仪表板
 
 ### 文档
 
