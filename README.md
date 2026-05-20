@@ -68,7 +68,6 @@ npm run build
 ### 文档
 
 - [SERIAL_LAYER.md](SERIAL_LAYER.md) - 通信层完整文档
-- [COMPLETION_REPORT.md](COMPLETION_REPORT.md) - Phase 2 Step 1 完成报告
 - [示例代码](src/serial/examples.ts) - 7个实现示例
 
 
