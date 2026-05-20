@@ -44,16 +44,11 @@
           <div v-else-if="serial.channel === 'uart'" class="field-group">
             <div class="field">
               <label>Port</label>
-              <select v-model="serial.port">
-                <option value="">Auto detect</option>
-                <option v-for="p in availablePorts" :key="p" :value="p">{{ p }}</option>
-              </select>
+              <AppSelect v-model="serial.port" :options="portOptions" />
             </div>
             <div class="field">
               <label>Baud Rate</label>
-              <select v-model="serial.baud">
-                <option v-for="b in baudRates" :key="b" :value="b">{{ b }}</option>
-              </select>
+              <AppSelect v-model="serial.baud" :options="baudOptions" />
             </div>
             <p class="section-desc" style="margin-top:4px">Frame format fixed at 8N1 (set by MCU library).</p>
           </div>
@@ -102,10 +97,7 @@
             </div>
             <div class="field">
               <label>Language</label>
-              <select v-model="display.lang">
-                <option value="zh">中文</option>
-                <option value="en">English</option>
-              </select>
+              <AppSelect v-model="display.lang" :options="langOptions" />
             </div>
           </div>
         </section>
@@ -147,6 +139,7 @@
 
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
+import AppSelect from '../components/AppSelect.vue'
 
 const sections = [
   { id: 'serial',   icon: '⌁', label: 'Serial' },
@@ -163,6 +156,13 @@ const serialChannels = [
 ]
 const availablePorts = ['COM3', 'COM4', 'COM5', '/dev/ttyUSB0', '/dev/ttyACM0']
 const baudRates = [9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600]
+
+const portOptions = [
+  { value: '', label: 'Auto detect' },
+  ...['COM3','COM4','COM5','/dev/ttyUSB0','/dev/ttyACM0'].map(p => ({ value: p, label: p })),
+]
+const baudOptions = [9600,19200,38400,57600,115200,230400,460800,921600].map(b => ({ value: b, label: String(b) }))
+const langOptions = [{ value: 'zh', label: '中文' }, { value: 'en', label: 'English' }]
 
 const serial = reactive({ channel: 'usb_cdc', port: '', baud: 115200, wifiHost: '192.168.4.1', wifiPort: 8080, connected: false })
 const display = reactive({ theme: 'light', fpsCap: 30, canvasScale: 1, lang: 'zh' })
@@ -274,22 +274,6 @@ h1 { margin: 0; font-size: clamp(32px, 4vw, 48px); line-height: 1.04; letter-spa
 .field select,
 .field input[type="range"] {
   width: 100%;
-}
-
-.field select {
-  padding: 9px 12px;
-  border: 1.5px solid rgba(36,36,36,.12);
-  border-radius: 10px;
-  background: rgba(246,246,241,.82);
-  font-size: 14px;
-  font-weight: 700;
-  color: #242424;
-  cursor: pointer;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23242424' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 12px center;
-  padding-right: 32px;
 }
 
 .field input[type="range"] {
