@@ -84,11 +84,11 @@
                   >
                     <path
                       class="speed-area"
-                      :d="areaPath(speedPoints, 240, 150)"
+                      :d="areaPath(speedPoints, 240, 150, 2000)"
                     />
                     <path
                       class="speed-line"
-                      :d="linePath(speedPoints, 240, 150)"
+                      :d="linePath(speedPoints, 240, 150, 2000)"
                     />
                   </svg>
                 </div>
@@ -281,7 +281,7 @@ const imageStats = reactive({ fps: 25, droppedFrames: 0 });
 const cpuPoints = ref([58, 62, 54, 48, 50, 45, 52, 68, 63, 59, 66, 45]);
 const ramPoints = ref([42, 48, 46, 51, 55, 58, 60, 64, 61, 63, 66, 60]);
 const romPoints = ref([64, 65, 64, 66, 65, 65, 67, 66, 65, 65, 66, 65]);
-const speedPoints = ref([22, 28, 25, 36, 42, 38, 52, 48, 62, 58, 68, 64]);
+const speedPoints = ref([22, 28, 25, 36, 42, 38, 52, 48, 62, 58, 68, 64].map(v => v * 20));
 
 const mcuLogs = ref([
   "[00:00:01] MCU boot complete",
@@ -313,16 +313,16 @@ const servoVisualDeg = computed(() =>
   Math.max(-42, Math.min(42, data.servo / 10 - 45)),
 );
 
-const linePath = (points: number[], w: number, h: number) =>
+const linePath = (points: number[], w: number, h: number, max = 100) =>
   points
     .map((p, i) => {
       const x = (i / (points.length - 1)) * w;
-      const y = h - (p / 100) * (h - 18) - 9;
+      const y = h - (Math.min(p, max) / max) * (h - 18) - 9;
       return `${i ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`;
     })
     .join(" ");
-const areaPath = (points: number[], w: number, h: number) =>
-  `${linePath(points, w, h)} L${w} ${h} L0 ${h} Z`;
+const areaPath = (points: number[], w: number, h: number, max = 100) =>
+  `${linePath(points, w, h, max)} L${w} ${h} L0 ${h} Z`;
 const pushPoint = (arr: typeof cpuPoints, value: number) => {
   arr.value = [...arr.value.slice(1), value];
 };
@@ -366,7 +366,7 @@ onMounted(() => {
     imageStats.fps = 22 + Math.random() * 8;
     pushPoint(cpuPoints, data.cpu);
     pushPoint(ramPoints, data.ram);
-    pushPoint(speedPoints, Math.min(90, Math.round(data.speed / 6)));
+    pushPoint(speedPoints, data.speed);
   }, 1000);
 });
 
