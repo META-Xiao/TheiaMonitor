@@ -160,7 +160,7 @@
 
     <!-- 移动端底部导航 -->
     <nav class="bottom-nav">
-      <b class="logo-m">✦</b>
+      <b class="logo-m" @click="cliOpen = !cliOpen"><Icon icon="lucide:sparkles" /></b>
       <div class="bottom-tabs">
         <button
           v-for="(tab, i) in tabs"
@@ -230,8 +230,11 @@ const cliOpen = ref(false);
 const cliHeight = ref(parseInt(localStorage.getItem("cliHeight") ?? "260"));
 
 function startCliResize(e: PointerEvent) {
+  e.preventDefault();
+  (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   const startY = e.clientY, startH = cliHeight.value;
   const onMove = (ev: PointerEvent) => {
+    ev.preventDefault();
     cliHeight.value = Math.max(120, Math.min(window.innerHeight - 80, startH - (ev.clientY - startY)));
   };
   const onUp = () => {
@@ -239,7 +242,7 @@ function startCliResize(e: PointerEvent) {
     window.removeEventListener("pointermove", onMove);
     window.removeEventListener("pointerup", onUp);
   };
-  window.addEventListener("pointermove", onMove);
+  window.addEventListener("pointermove", onMove, { passive: false });
   window.addEventListener("pointerup", onUp);
 }
 const onKey = (e: KeyboardEvent) => {
@@ -1000,6 +1003,13 @@ h1 {
   flex-shrink: 0;
   background: transparent;
   transition: background 150ms;
+  touch-action: none;
+  position: relative;
+}
+.cli-resize-bar::before {
+  content: '';
+  position: absolute;
+  inset: -10px 0;
 }
 .cli-resize-bar:hover { background: var(--surface); }
 .cli-header {
