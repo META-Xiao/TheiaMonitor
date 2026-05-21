@@ -616,33 +616,33 @@ h1 {
   backdrop-filter: blur(22px);
 }
 .telemetry-card {
-  height: 560px;
+  height: auto;
+  min-height: 400px;
   border-radius: 26px;
   padding: 18px;
   display: grid;
-  grid-template-columns: 386px minmax(220px, 1fr);
+  grid-template-columns: minmax(300px, 38%) minmax(0, 1fr);
   gap: 16px;
   overflow: hidden;
 }
 .telemetry-zone {
   display: grid;
-  grid-template-columns: 172px 200px;
-  gap: 12px;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  align-content: start;
   min-width: 0;
-  min-height: 0;
 }
 .resource-stack {
-  display: grid;
-  grid-template-rows: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  min-height: 0;
+  display: contents;
 }
 .motion-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding-top: 26px;
-  min-height: 0;
+  display: contents;
+}
+.resource-card,
+.speed-card,
+.attitude-card {
+  height: 150px;
+  max-height: 150px;
 }
 .mini-card,
 .mcu-card {
@@ -684,11 +684,14 @@ h1 {
 .speed-card {
   height: 204px;
   padding: 14px;
+  display: flex;
+  flex-direction: column;
 }
 .speed-chart {
   width: 100%;
-  height: 150px;
-  margin-top: 12px;
+  flex: 1;
+  min-height: 0;
+  margin-top: 8px;
 }
 .speed-area {
   fill: rgba(32, 184, 166, 0.16);
@@ -861,40 +864,43 @@ h1 {
   }
   .telemetry-card {
     height: auto;
-    grid-template-columns: 1fr;
+    grid-template-columns: 340px 1fr;
   }
   .telemetry-zone {
-    grid-template-columns: 1fr;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+    gap: 8px;
+    align-content: start;
   }
   .resource-stack {
-    display: grid;
-    grid-template-rows: unset;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
+    display: contents;
+  }
+  .resource-card {
+    height: 150px;
+    max-height: 150px;
+    flex-shrink: 0;
   }
   .resource-card .mini-chart {
     min-height: 48px;
   }
   .motion-stack {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    padding-top: 0;
-    gap: 8px;
+    display: contents;
   }
-  .speed-card {
-    height: auto;
+  .speed-card,
+  .attitude-card {
+    height: 150px;
+    max-height: 150px;
+    max-width: none;
+    flex-shrink: 0;
   }
   .speed-chart {
     height: 80px;
   }
-  .attitude-card {
-    margin-top: 0;
-  }
-  .vision-pane,
   .mcu-card {
+    height: auto;
+  }
+  .vision-pane {
     height: 420px;
   }
   .pc-log-card {
@@ -921,8 +927,7 @@ h1 {
   .telemetry-card {
     padding: 12px;
   }
-  .vision-pane,
-  .mcu-card {
+  .vision-pane {
     height: 320px;
   }
   .pc-log-card {
@@ -986,6 +991,14 @@ h1 {
     grid-template-columns: 1fr 1fr;
     padding-top: 0;
     gap: 8px;
+  }
+  .speed-card {
+    max-width: none;
+    justify-self: stretch;
+  }
+  .attitude-card {
+    max-width: none;
+    justify-self: stretch;
   }
   .speed-card {
     height: auto;
