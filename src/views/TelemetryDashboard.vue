@@ -12,7 +12,28 @@
           {{ tab }}
         </button>
       </div>
-      <div class="avatar">TV</div>
+      <div
+        class="avatar"
+        :class="conn.connected ? 'online' : 'offline'"
+        @mouseenter="avatarOpen = true"
+        @mouseleave="avatarOpen = false"
+        @click="avatarOpen = !avatarOpen"
+      >
+        {{ conn.connected ? conn.mcuName.slice(0, 2) + '.' : 'TV' }}
+        <Transition name="popup">
+          <div v-if="avatarOpen" class="avatar-popup">
+            <div class="popup-status" :class="conn.connected ? 'online' : 'offline'">
+              {{ conn.connected ? 'Online' : 'Offline' }}
+            </div>
+            <div v-if="conn.connected">
+              <div class="popup-row"><span>Device</span><b>{{ conn.mcuName }}</b></div>
+              <div class="popup-row"><span>Port</span><b>{{ conn.portLabel }}</b></div>
+              <div class="popup-row"><span>Uptime</span><b>{{ uptime }}</b></div>
+            </div>
+            <div v-else class="popup-hint">No MCU connected</div>
+          </div>
+        </Transition>
+      </div>
     </nav>
 
     <main v-show="activeTab === 0" class="main">
@@ -152,7 +173,26 @@
           <span class="tab-label">{{ tab }}</span>
         </button>
       </div>
-      <div class="avatar-m">TV</div>
+      <div
+        class="avatar-m"
+        :class="conn.connected ? 'online' : 'offline'"
+        @click="avatarOpen = !avatarOpen"
+      >
+        {{ conn.connected ? conn.mcuName.slice(0, 2) + '.' : 'TV' }}
+        <Transition name="popup">
+          <div v-if="avatarOpen" class="avatar-popup avatar-popup-m">
+            <div class="popup-status" :class="conn.connected ? 'online' : 'offline'">
+              {{ conn.connected ? 'Online' : 'Offline' }}
+            </div>
+            <div v-if="conn.connected">
+              <div class="popup-row"><span>Device</span><b>{{ conn.mcuName }}</b></div>
+              <div class="popup-row"><span>Port</span><b>{{ conn.portLabel }}</b></div>
+              <div class="popup-row"><span>Uptime</span><b>{{ uptime }}</b></div>
+            </div>
+            <div v-else class="popup-hint">No MCU connected</div>
+          </div>
+        </Transition>
+      </div>
     </nav>
   </div>
 </template>
@@ -160,11 +200,21 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 import SettingsView from "./SettingsView.vue";
+import { conn } from "../stores/connection";
 
 const tabs = ["总览", "图传", "设置"];
 const tabIcons = ["◈", "⊡", "⚙"];
 const activeTab = ref(0);
 const settingsView = ref<InstanceType<typeof SettingsView>>();
+
+const avatarOpen = ref(false);
+const now = ref(Date.now());
+const uptime = computed(() => {
+  if (!conn.connectedAt) return "";
+  const s = Math.floor((now.value - conn.connectedAt) / 1000);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  return h ? `${h}h ${m}m` : m ? `${m}m ${sec}s` : `${sec}s`;
+});
 
 const onSettingsHover = () => {
   activeTab.value = 2;
@@ -264,6 +314,7 @@ const drawFrame = () => {
 onMounted(() => {
   drawFrame();
   timerId = window.setInterval(() => {
+    now.value = Date.now();
     data.cpu = Math.floor(30 + Math.random() * 55);
     data.ram = Math.floor(42 + Math.random() * 38);
     data.speed = Math.floor(90 + Math.random() * 390);
@@ -340,7 +391,14 @@ onUnmounted(() => {
   background: var(--nav-tab-active);
   font-weight: 900;
   box-shadow: 0 12px 34px rgba(33, 58, 75, 0.12);
+  position: relative;
+  cursor: pointer;
+  transition: box-shadow 200ms;
 }
+.avatar.online  { box-shadow: 0 0 0 2.5px #22c55e, 0 12px 34px rgba(33,58,75,.12); }
+.avatar.offline { box-shadow: 0 0 0 2.5px #ef4444, 0 12px 34px rgba(33,58,75,.12); }
+[data-theme="dark"] .avatar.online  { box-shadow: 0 0 0 2.5px #4ade80, 0 12px 34px rgba(0,0,0,.25); }
+[data-theme="dark"] .avatar.offline { box-shadow: 0 0 0 2.5px #f87171, 0 12px 34px rgba(0,0,0,.25); }
 
 /* ── 底部导航（移动端） ── */
 .bottom-nav {
@@ -411,7 +469,58 @@ onUnmounted(() => {
   font-weight: 900;
   font-size: 12px;
   flex-shrink: 0;
+  position: relative;
+  cursor: pointer;
 }
+.avatar-m.online  { box-shadow: 0 0 0 2.5px #22c55e; }
+.avatar-m.offline { box-shadow: 0 0 0 2.5px #ef4444; }
+[data-theme="dark"] .avatar-m.online  { box-shadow: 0 0 0 2.5px #4ade80; }
+[data-theme="dark"] .avatar-m.offline { box-shadow: 0 0 0 2.5px #f87171; }
+
+.avatar-popup {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  min-width: 180px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  box-shadow: var(--card-shadow);
+  backdrop-filter: blur(20px);
+  padding: 12px 14px;
+  z-index: 300;
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+}
+.avatar-popup-m {
+  right: 0;
+  bottom: calc(100% + 10px);
+  top: auto;
+}
+.popup-status {
+  font-weight: 800;
+  font-size: 12px;
+  margin-bottom: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  display: inline-block;
+}
+.popup-status.online  { background: rgba(34,197,94,.15); color: #16a34a; }
+.popup-status.offline { background: rgba(239,68,68,.15);  color: #dc2626; }
+[data-theme="dark"] .popup-status.online  { background: rgba(74,222,128,.15); color: #4ade80; }
+[data-theme="dark"] .popup-status.offline { background: rgba(248,113,113,.15); color: #f87171; }
+.popup-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 3px 0;
+  color: var(--text-muted);
+}
+.popup-row b { color: var(--text); font-weight: 600; }
+.popup-hint { color: var(--text-muted); font-size: 12px; }
+.popup-enter-active, .popup-leave-active { transition: opacity 150ms, transform 150ms; }
+.popup-enter-from, .popup-leave-to { opacity: 0; transform: translateY(-4px) scale(0.97); }
 .main {
   padding: 0 28px 72px;
 }

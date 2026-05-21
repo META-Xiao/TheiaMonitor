@@ -234,6 +234,7 @@
 <script setup lang="ts">
 import { reactive, ref, watch, onMounted, onUnmounted } from "vue";
 import AppSelect from "../components/AppSelect.vue";
+import { conn } from "../stores/connection";
 
 const sections = [
   { id: "serial", icon: "⌁", label: "Serial" },
@@ -446,6 +447,14 @@ const channels = reactive([
 
 const toggleConnect = () => {
   serial.connected = !serial.connected;
+  conn.connected = serial.connected;
+  if (serial.connected) {
+    conn.portLabel = serial.portLabel || serial.channel.toUpperCase();
+    conn.mcuName = "MCU";
+    conn.connectedAt = Date.now();
+  } else {
+    conn.connectedAt = null;
+  }
 };
 </script>
 
