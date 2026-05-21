@@ -80,14 +80,7 @@
 
       <!-- MCU log -->
       <div class="vision-log">
-        <div class="log-title">MCU Output <em :class="conn.connected ? 'live' : 'offline'">{{ conn.connected ? 'LIVE' : 'OFFLINE' }}</em></div>
-        <div class="log-body">
-          <div
-            v-for="(log, i) in logs"
-            :key="i"
-            :class="['log', { warn: log.includes('WARN'), err: log.includes('ERROR') }]"
-          >{{ log }}</div>
-        </div>
+        <LogCard title="MCU Output" :logs="logs" :connected="conn.connected" />
       </div>
     </div>
   </div>
@@ -97,6 +90,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { Icon } from '@iconify/vue';
 import { conn } from '../stores/connection';
+import LogCard from '../components/LogCard.vue';
 
 const props = defineProps<{
   canvasRef?: HTMLCanvasElement | null;

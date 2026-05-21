@@ -1,7 +1,7 @@
 <template>
   <div class="page" @click="avatarOpen = false; mobileAvatarOpen = false">
     <nav class="nav">
-      <b class="logo" @click="cliOpen = !cliOpen" title="Toggle CLI (Ctrl+J)"><Icon icon="lucide:sparkles" /></b>
+      <b class="logo" @click="cliOpen = !cliOpen" title="Toggle CLI (Ctrl+J)"><img src="/img/Simple_logo.svg" class="logo-img" alt="logo" /></b>
       <div class="tabs">
         <button
           v-for="(tab, i) in tabs"
@@ -114,29 +114,12 @@
             </section>
 
             <aside class="mcu-card">
-              <div class="log-title">MCU output <em :class="conn.connected ? 'live' : 'offline'">{{ conn.connected ? 'LIVE' : 'OFFLINE' }}</em></div>
-              <div class="mcu-logs">
-                <div
-                  v-for="(log, i) in mcuLogs.slice(-9)"
-                  :key="i"
-                  :class="[
-                    'log',
-                    { warn: log.includes('WARN'), err: log.includes('ERROR') },
-                  ]"
-                >
-                  {{ log }}
-                </div>
-              </div>
+              <LogCard title="MCU output" :logs="mcuLogs" :connected="conn.connected" />
             </aside>
           </section>
 
           <section class="pc-log-card">
-            <div class="log-title">Host RX / Boot Log <em :class="conn.connected ? 'live' : 'offline'">{{ conn.connected ? 'LIVE' : 'OFFLINE' }}</em></div>
-            <div class="pc-logs">
-              <div v-for="(log, i) in hostLogs" :key="i" class="log">
-                {{ log }}
-              </div>
-            </div>
+            <LogCard title="Host RX / Boot Log" :logs="hostLogs" :connected="conn.connected" />
           </section>
         </div>
 
@@ -170,7 +153,7 @@
 
     <!-- 移动端底部导航 -->
     <nav class="bottom-nav">
-      <b class="logo-m" @click="cliOpen = !cliOpen"><Icon icon="lucide:sparkles" /></b>
+      <b class="logo-m" @click="cliOpen = !cliOpen"><img src="/img/Simple_logo.svg" class="logo-img" alt="logo" /></b>
       <div class="bottom-tabs">
         <button
           v-for="(tab, i) in tabs"
@@ -230,6 +213,7 @@ import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 import { Icon } from "@iconify/vue";
 import SettingsView from "./SettingsView.vue";
 import VisionView from "./VisionView.vue";
+import LogCard from "../components/LogCard.vue";
 import { conn } from "../stores/connection";
 
 const tabs = ["Overview", "Vision", "Settings"];
@@ -450,6 +434,12 @@ onUnmounted(() => {
 }
 .logo {
   font-size: 24px;
+}
+.logo-img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  display: block;
 }
 .tabs {
   display: flex;
@@ -702,6 +692,8 @@ h1 {
   border-radius: 16px;
   background: var(--surface);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 .resource-card {
   padding: 12px;
@@ -808,6 +800,8 @@ h1 {
   padding: 14px;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  max-height: 524px;
 }
 .log-title {
   display: flex;
@@ -831,21 +825,21 @@ h1 {
 [data-theme="dark"] .log-title em.offline { background: rgba(248,113,113,.15); color: #f87171; }
 .mcu-logs,
 .pc-logs {
-  display: grid;
-  gap: 8px;
-  overflow: auto;
-}
-.mcu-logs {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
   flex: 1;
   min-height: 0;
 }
 .log {
-  padding: 9px 12px;
-  border-radius: 10px;
-  background: var(--surface-alt);
+  padding: 3px 8px;
+  border-radius: 4px;
   color: var(--text-muted);
-  font-family: Consolas, "JetBrains Mono", monospace;
+  font-family: "JetBrains Mono", Consolas, monospace;
   font-size: 11px;
+  line-height: 1.5;
+  flex-shrink: 0;
 }
 .log.warn {
   color: var(--log-warn-text);
@@ -904,7 +898,9 @@ h1 {
 .pc-log-card {
   border-radius: 24px;
   padding: 18px;
-  overflow: hidden;
+  max-height: 220px;
+  display: flex;
+  flex-direction: column;
   margin-bottom: 24px;
 }
 .pc-logs {
