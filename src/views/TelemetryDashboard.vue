@@ -131,7 +131,7 @@
           </section>
 
           <section class="pc-log-card">
-            <div class="log-title">上位机接收日志 / 启动日志 <em>HOST</em></div>
+            <div class="log-title">Host RX / Boot Log <em>HOST</em></div>
             <div class="pc-logs">
               <div v-for="(log, i) in hostLogs" :key="i" class="log">
                 {{ log }}
@@ -156,7 +156,7 @@
     </main>
 
     <SettingsView ref="settingsView" v-show="activeTab === 2" />
-    <main v-show="activeTab === 1" class="empty">{{ tabs[1] }} 页面建设中</main>
+    <main v-show="activeTab === 1" class="empty">Vision — Coming Soon</main>
 
     <!-- 移动端底部导航 -->
     <nav class="bottom-nav">
@@ -204,7 +204,7 @@
           <button class="cli-close" @click="cliOpen = false"><Icon icon="lucide:x" /></button>
         </div>
         <div class="cli-body">
-          <span class="cli-placeholder">命令行建设中</span>
+          <span class="cli-placeholder">CLI — Coming Soon</span>
         </div>
       </div>
     </Transition>
@@ -217,7 +217,7 @@ import { Icon } from "@iconify/vue";
 import SettingsView from "./SettingsView.vue";
 import { conn } from "../stores/connection";
 
-const tabs = ["总览", "图传", "设置"];
+const tabs = ["Overview", "Vision", "Settings"];
 const tabIcons = ["lucide:layout-dashboard", "lucide:video", "lucide:settings"];
 const activeTab = ref(0);
 const settingsView = ref<InstanceType<typeof SettingsView>>();
@@ -276,14 +276,14 @@ const romPoints = ref([64, 65, 64, 66, 65, 65, 67, 66, 65, 65, 66, 65]);
 const speedPoints = ref([22, 28, 25, 36, 42, 38, 52, 48, 62, 58, 68, 64]);
 
 const mcuLogs = ref([
-  "[00:00:01] MCU 启动完成",
-  "[00:00:02] 图像传感器初始化",
-  "[00:00:03] 舵机控制系统就绪",
-  "[00:00:04] 电机驱动激活",
-  "[00:00:05] 所有外设准备完毕",
-  "[00:01:00] [INFO] CPU 占用: 45%",
-  "[00:01:01] [INFO] RAM 占用: 60%",
-  "[00:01:02] [INFO] 速度: 150 mm/s",
+  "[00:00:01] MCU boot complete",
+  "[00:00:02] Image sensor init",
+  "[00:00:03] Servo control ready",
+  "[00:00:04] Motor driver active",
+  "[00:00:05] All peripherals ready",
+  "[00:01:00] [INFO] CPU usage: 45%",
+  "[00:01:01] [INFO] RAM usage: 60%",
+  "[00:01:02] [INFO] Speed: 150 mm/s",
 ]);
 
 const hostLogs = ref([

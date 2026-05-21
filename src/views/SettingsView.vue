@@ -383,7 +383,7 @@ const baudOptions = [
 ].map((b) => ({ value: b, label: String(b) }));
 const langOptions = [
   { value: "en", label: "English" },
-  { value: "zh", label: "简中 (unavailable)" },
+  { value: "zh", label: "Simplified Chinese" },
 ];
 
 const serial = reactive({
@@ -468,6 +468,7 @@ const toggleConnect = () => {
 .settings {
   padding: 0 28px 72px;
   min-height: calc(100vh - 58px);
+  font-family: Inter, "Segoe UI", sans-serif;
 }
 
 .settings-header {
@@ -629,6 +630,7 @@ h1 {
   color: var(--text-muted);
   font-size: 13px;
   font-weight: 800;
+  font-family: inherit;
   cursor: pointer;
   transition:
     background 150ms,

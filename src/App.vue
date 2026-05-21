@@ -11,12 +11,14 @@ import TelemetryDashboard from './views/TelemetryDashboard.vue'
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  font-family: inherit;
 }
 
 html, body {
   width: 100%;
   height: 100%;
   overflow: hidden;
+  font-family: Inter, "Segoe UI", sans-serif;
 }
 
 #app {
