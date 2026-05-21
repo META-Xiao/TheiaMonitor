@@ -52,7 +52,10 @@
           <div v-else-if="serial.channel === 'uart'" class="field-group">
             <div class="field">
               <label>Port</label>
-              <AppSelect v-model="serial.port" :options="portOptions" />
+              <div style="display:flex;gap:8px;align-items:center">
+                <span style="font-size:13px;color:var(--text-muted)">{{ serial.portLabel || 'Not selected' }}</span>
+                <button class="action-btn" @click="selectPort">Select Port</button>
+              </div>
             </div>
             <div class="field">
               <label>Baud Rate</label>
@@ -339,6 +342,7 @@ onUnmounted(() => {
   document.removeEventListener("pointermove", handleBarDrag);
   document.removeEventListener("pointerup", endBarDrag);
   document.removeEventListener("pointercancel", endBarDrag);
+  systemMq?.removeEventListener("change", onSystemChange);
 });
 
 const serialChannels = [
@@ -346,16 +350,32 @@ const serialChannels = [
   { id: "uart", label: "UART" },
   { id: "wifi", label: "WIFI" },
 ];
-const availablePorts = ["COM3", "COM4", "COM5", "/dev/ttyUSB0", "/dev/ttyACM0"];
 const baudRates = [9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600];
 
-const portOptions = [
-  { value: "", label: "Auto detect" },
-  ...["COM3", "COM4", "COM5", "/dev/ttyUSB0", "/dev/ttyACM0"].map((p) => ({
-    value: p,
-    label: p,
-  })),
-];
+const USB_VENDORS: Record<number, string> = {
+  0x1a86: "CH340", 0x0403: "FTDI", 0x10c4: "CP210x", 0x2341: "Arduino",
+  0x0483: "STM32", 0x2e8a: "RP2040",
+};
+
+async function selectPort() {
+  if (!("serial" in navigator)) return;
+  try {
+    const port = await (navigator as any).serial.requestPort();
+    const all = await (navigator as any).serial.getPorts();
+    const info = port.getInfo?.() ?? {};
+    const vid: number | undefined = info.usbVendorId;
+    const pid: number | undefined = info.usbProductId;
+    const name = vid ? (USB_VENDORS[vid] ?? "USB") : "Serial Port";
+    const id = vid ? ` (${vid.toString(16).padStart(4,"0")}:${pid?.toString(16).padStart(4,"0") ?? "???"})` : "";
+    const sameVid = all.filter((p: any) => p.getInfo?.()?.usbVendorId === vid);
+    const idx = sameVid.findIndex((p: any) => p === port);
+    const suffix = sameVid.length > 1 ? ` #${idx + 1}` : "";
+    serial.portLabel = `${name}${suffix}${id}`;
+    serial.portHandle = port;
+  } catch {
+    // user cancelled
+  }
+}
 const baudOptions = [
   9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600,
 ].map((b) => ({ value: b, label: String(b) }));
@@ -367,30 +387,42 @@ const langOptions = [
 const serial = reactive({
   channel: "usb_cdc",
   port: "",
+  portLabel: "",
+  portHandle: null as any,
   baud: 115200,
   wifiHost: "192.168.4.1",
   wifiPort: 8080,
   connected: false,
 });
 const display = reactive({
-  theme: "light",
+  theme: "system",
   fpsCap: 30,
   canvasScale: 1,
   lang: "zh",
 });
 
-watch(
-  () => display.theme,
-  (t) => {
-    const el = document.documentElement;
-    if (t === "system") {
-      el.removeAttribute("data-theme");
-    } else {
-      el.dataset.theme = t;
-    }
-  },
-  { immediate: true },
-);
+let systemMq: MediaQueryList | null = null;
+
+function applyTheme(t: string) {
+  const el = document.documentElement;
+  if (t === "system") {
+    const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    el.dataset.theme = dark ? "dark" : "light";
+  } else {
+    el.dataset.theme = t;
+  }
+}
+
+watch(() => display.theme, (t) => {
+  systemMq?.removeEventListener("change", onSystemChange);
+  if (t === "system") {
+    systemMq = window.matchMedia("(prefers-color-scheme: dark)");
+    systemMq.addEventListener("change", onSystemChange);
+  }
+  applyTheme(t);
+}, { immediate: true });
+
+function onSystemChange() { applyTheme("system"); }
 const channels = reactive([
   {
     id: "image",
