@@ -156,7 +156,17 @@
     </main>
 
     <SettingsView ref="settingsView" v-show="activeTab === 2" />
-    <main v-show="activeTab === 1" class="empty">Vision — Coming Soon</main>
+    <VisionView
+      v-show="activeTab === 1"
+      :canvas-ref="imageCanvas"
+      :mcu-logs="mcuLogs"
+      :data="data"
+      :cpu-points="cpuPoints"
+      :ram-points="ramPoints"
+      :rom-points="romPoints"
+      :speed-points="speedPoints"
+      :fps="imageStats.fps"
+    />
 
     <!-- 移动端底部导航 -->
     <nav class="bottom-nav">
@@ -219,6 +229,7 @@
 import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 import { Icon } from "@iconify/vue";
 import SettingsView from "./SettingsView.vue";
+import VisionView from "./VisionView.vue";
 import { conn } from "../stores/connection";
 
 const tabs = ["Overview", "Vision", "Settings"];
