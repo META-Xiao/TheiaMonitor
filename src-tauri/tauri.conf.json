@@ -18,8 +18,7 @@
         "resizable": true,
         "fullscreen": false,
         "decorations": true,
-        "shadow": true,
-        "theme": "Auto"
+        "shadow": true
       }
     ],
     "security": {
@@ -36,9 +35,10 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "nsis": {
-      "installMode": "currentUser",
-      "allowDowngrades": true
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
     }
   }
 }
