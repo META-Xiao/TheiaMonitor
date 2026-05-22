@@ -3,8 +3,10 @@
     <span>{{ label }}</span><b>{{ value }}</b>
   </div>
   <svg :viewBox="`0 0 ${viewW} ${viewH}`" preserveAspectRatio="none" class="card-chart">
-    <path class="card-area" :d="areaPath(points, viewW, viewH, max)" />
-    <path class="card-line" :d="linePath(points, viewW, viewH, max)" :style="color ? { stroke: color } : {}" />
+    <template v-if="points.length >= 2">
+      <path class="card-area" :d="areaPath(points, viewW, viewH, max)" />
+      <path class="card-line" :d="linePath(points, viewW, viewH, max)" :style="color ? { stroke: color } : {}" />
+    </template>
   </svg>
 </template>
 

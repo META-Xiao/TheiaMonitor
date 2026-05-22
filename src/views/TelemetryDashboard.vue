@@ -50,21 +50,26 @@
                   :key="item.name"
                   class="mini-card resource-card"
                 >
-                  <SensorCard :label="item.name" :value="item.value + '%'" :color="item.color" :points="item.points" />
+                  <SensorCard
+                    :label="item.name"
+                    :value="item.value !== null ? item.value + item.unit : 'No Signal'"
+                    :color="item.color"
+                    :points="item.points"
+                  />
                 </div>
               </aside>
 
               <aside class="motion-column">
                 <div class="mini-card resource-card">
-                  <SensorCard label="Network RX" :value="networkSpeed + ' Mbps'" color="#6366f1" :points="networkPoints" />
+                  <SensorCard label="Network RX" :value="networkRxLabel" color="#6366f1" :points="networkPoints" :max="500" />
                 </div>
 
                 <div class="mini-card speed-card">
-                  <SensorCard label="Speed curve" :value="speedMs + ' m/s'" color="#20b8a6" :points="speedPoints" :max="2000" :view-w="240" :view-h="150" />
+                  <SensorCard label="Speed" :value="speedMs !== null ? speedMs + ' m/s' : 'No Signal'" color="#20b8a6" :points="speedPoints" :max="2000" :view-w="240" :view-h="150" />
                 </div>
 
                 <div class="mini-card attitude-card">
-                  <ServoCard :deg="servoDeg" :visual-deg="servoVisualDeg" />
+                  <ServoCard :deg="servoDeg ?? '--'" :visual-deg="servoVisualDeg" />
                 </div>
               </aside>
             </section>
@@ -81,14 +86,13 @@
 
         <section class="vision-pane">
           <div class="pane-head">
-            <span>Vision stream</span><b>{{ imageStats.fps.toFixed(1) }} FPS</b>
+            <span>Vision stream</span><b>-- FPS</b>
           </div>
           <div class="canvas-wrap">
             <canvas ref="imageCanvas" width="188" height="120" />
           </div>
           <div class="vision-foot">
-            <span>Source 188×120</span
-            ><span>Drop {{ imageStats.droppedFrames }}</span>
+            <span>Source 188×120</span><span>--</span>
           </div>
         </section>
       </section>
@@ -99,13 +103,13 @@
       v-show="activeTab === 1"
       :canvas-ref="imageCanvas"
       :mcu-logs="mcuLogs"
-      :data="data"
+      :current="current"
       :cpu-points="cpuPoints"
       :ram-points="ramPoints"
       :rom-points="romPoints"
       :speed-points="speedPoints"
       :network-points="networkPoints"
-      :fps="imageStats.fps"
+      :network-rx-kbps="networkRxKbps"
     />
 
     <!-- 移动端底部导航 -->
@@ -166,17 +170,24 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { Icon } from "@iconify/vue";
 import SettingsView from "./SettingsView.vue";
 import VisionView from "./VisionView.vue";
 import LogCard from "../components/LogCard.vue";
 import SensorCard from "../components/SensorCard.vue";
 import ServoCard from "../components/ServoCard.vue";
-import { useChartPath } from "../composables/useChartPath";
+import { useCanvasAnimation } from "../composables/useCanvasAnimation";
 import { conn } from "../stores/connection";
+import { TelemetrySerialManager } from "../serial/manager";
+import { ResourceManager } from "../serial/resource-manager";
+import { LogProcessManager } from "../serial/log-manager";
+import { startFrontendMock } from "../serial/__tests__/frontend-mock";
 
-const { linePath, areaPath } = useChartPath();
+const serialManager = new TelemetrySerialManager();
+const resourceManager = new ResourceManager();
+const logManager = new LogProcessManager(serialManager);
+resourceManager.attach(serialManager);
 
 const tabs = ["Overview", "Vision", "Settings"];
 const tabIcons = ["lucide:layout-dashboard", "lucide:video", "lucide:settings"];
@@ -230,30 +241,74 @@ const onBottomTab = (i: number) => {
     activeTab.value = i;
   }
 };
+const HISTORY = 12;
 const imageCanvas = ref<HTMLCanvasElement>();
-let timerId: number | undefined;
+const imageStats = ref({ fps: 0, droppedFrames: 0 });
 
-const data = reactive({ cpu: 45, ram: 60, rom: 65, speed: 150, servo: 250, networkSpeed: 45 });
-const imageStats = reactive({ fps: 25, droppedFrames: 0 });
-const cpuPoints = ref([58, 62, 54, 48, 50, 45, 52, 68, 63, 59, 66, 45]);
-const ramPoints = ref([42, 48, 46, 51, 55, 58, 60, 64, 61, 63, 66, 60]);
-const romPoints = ref([64, 65, 64, 66, 65, 65, 67, 66, 65, 65, 66, 65]);
-const speedPoints = ref([22, 28, 25, 36, 42, 38, 52, 48, 62, 58, 68, 64].map(v => v * 20));
-const networkPoints = ref([35, 42, 38, 55, 48, 62, 45, 58, 50, 65, 52, 45]);
-const networkSpeed = computed(() => (data.networkSpeed / 10).toFixed(1));
-const networkGaugePercent = computed(() => Math.min(100, (data.networkSpeed / 100) * 100));
+// ── 历史点数组 ──
+const cpuPoints     = ref<number[]>([]);
+const ramPoints     = ref<number[]>([]);
+const romPoints     = ref<number[]>([]);
+const speedPoints   = ref<number[]>([]);
+const networkPoints = ref<number[]>([]);
 
-const mcuLogs = ref([
-  "[00:00:01] MCU boot complete",
-  "[00:00:02] Image sensor init",
-  "[00:00:03] Servo control ready",
-  "[00:00:04] Motor driver active",
-  "[00:00:05] All peripherals ready",
-  "[00:01:00] [INFO] CPU usage: 45%",
-  "[00:01:01] [INFO] RAM usage: 60%",
-  "[00:01:02] [INFO] Speed: 150 mm/s",
+function pushPoint(arr: typeof cpuPoints, v: number) {
+  arr.value = [...arr.value.slice(-(HISTORY - 1)), v];
+}
+
+// STC32G144K256 内存规格
+const XDATA_TOTAL = 16384;
+const EDATA_TOTAL = 8192;
+const RAM_TOTAL   = XDATA_TOTAL + EDATA_TOTAL; // 5120 B
+
+// ── 当前数据（来自 ResourceManager） ──
+const current = ref(resourceManager.getCurrentData());
+const hasSignal = computed(() => current.value !== null);
+
+const cpuVal  = computed(() => hasSignal.value ? current.value!.cpuUsage : null);
+const ramVal  = computed(() => hasSignal.value ? current.value!.ramUsage : null);
+const romVal  = computed(() => {
+  if (!hasSignal.value) return null;
+  const free = current.value!.freeXDATA + current.value!.freeEDATA;
+  return Math.round((1 - free / RAM_TOTAL) * 100);
+});
+const speedMs       = computed(() => hasSignal.value ? (current.value!.speed / 1000).toFixed(2) : null);
+const servoDeg      = computed(() => hasSignal.value ? (current.value!.servoAngle / 10).toFixed(1) : null);
+const servoVisualDeg = computed(() =>
+  hasSignal.value ? Math.max(-42, Math.min(42, current.value!.servoAngle / 10 - 45)) : 0
+);
+
+// ── Network RX：host 端根据收到的帧字节数计算吞吐量 ──
+const networkRxKbps = ref<number | null>(null);
+const networkRxLabel = computed(() => {
+  if (networkRxKbps.value === null) return 'No Signal';
+  const bps = networkRxKbps.value;
+  return bps >= 1024 ? `${(bps / 1024).toFixed(1)} KB/s` : `${Math.round(bps)} B/s`;
+});
+let _rxBytes = 0;
+let _rxLastTs = 0;
+
+function trackRxBytes(bytes: number) {
+  const now = Date.now();
+  if (_rxLastTs === 0) { _rxLastTs = now; }
+  _rxBytes += bytes;
+  const dt = (now - _rxLastTs) / 1000;
+  if (dt >= 1) {
+    networkRxKbps.value = Math.round(_rxBytes / dt * 10) / 10; // bytes/s
+    _rxBytes = 0;
+    _rxLastTs = now;
+    pushPoint(networkPoints, networkRxKbps.value / 1024); // chart in KB/s
+  }
+}
+
+const resourceCards = computed(() => [
+  { name: "CPU", value: cpuVal.value, unit: "%",  color: "#242424", points: cpuPoints.value },
+  { name: "RAM", value: ramVal.value, unit: "%",  color: "#20b8a6", points: ramPoints.value },
+  { name: "ROM", value: romVal.value, unit: "%",  color: "#c7d54f", points: romPoints.value },
 ]);
 
+// ── MCU logs（来自 LogProcessManager） ──
+const mcuLogs = ref<string[]>([]);
 const hostLogs = ref([
   "[HOST 00:00:00] Trace Vector PC Host started",
   "[HOST 00:00:01] serial manager ready",
@@ -262,110 +317,50 @@ const hostLogs = ref([
   "[HOST 00:00:04] image stream waiting for frame",
 ]);
 
-const resourceCards = computed(() => [
-  { name: "CPU", value: data.cpu, color: "#242424", points: cpuPoints.value },
-  { name: "RAM", value: data.ram, color: "#20b8a6", points: ramPoints.value },
-  { name: "ROM", value: data.rom, color: "#c7d54f", points: romPoints.value },
-]);
-const speedMs = computed(() => (data.speed / 1000).toFixed(2));
-const servoDeg = computed(() => (data.servo / 10).toFixed(1));
-const servoVisualDeg = computed(() =>
-  Math.max(-42, Math.min(42, data.servo / 10 - 45)),
-);
+// ── Canvas 动画 ──
+const { start: startAnim, stop: stopAnim } = useCanvasAnimation(imageCanvas);
 
-const pushPoint = (arr: typeof cpuPoints, value: number) => {
-  arr.value = [...arr.value.slice(1), value];
-};
-
-let frameAnimId: number;
-let snowflakeAngle = 0;
-
-function kochPoints(x1: number, y1: number, x2: number, y2: number, depth: number): [number,number][] {
-  if (depth === 0) return [[x2, y2]];
-  const dx = x2 - x1, dy = y2 - y1;
-  const ax = x1 + dx/3, ay = y1 + dy/3;
-  const bx = x1 + dx*2/3, by = y1 + dy*2/3;
-  const mx = (x1+x2)/2 - dy*Math.sqrt(3)/6, my = (y1+y2)/2 + dx*Math.sqrt(3)/6;
-  return [...kochPoints(x1,y1,ax,ay,depth-1), ...kochPoints(ax,ay,mx,my,depth-1),
-          ...kochPoints(mx,my,bx,by,depth-1), ...kochPoints(bx,by,x2,y2,depth-1)];
-}
-
-const drawFrame = () => {
-  const canvas = imageCanvas.value;
-  const ctx = canvas?.getContext("2d");
-  if (!canvas || !ctx) return;
-  const w = canvas.width, h = canvas.height;
-  ctx.fillStyle = "#0a0e1a";
-  ctx.fillRect(0, 0, w, h);
-
-  const cx = w/2, cy = h/2, r = Math.min(w,h) * 0.38;
-  snowflakeAngle += 0.008;
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.rotate(snowflakeAngle);
-  ctx.strokeStyle = "rgba(32,184,166,0.85)";
-  ctx.lineWidth = 0.8;
-  ctx.beginPath();
-  for (let s = 0; s < 3; s++) {
-    const a = (s * 2 * Math.PI) / 3;
-    const x1 = Math.cos(a)*r, y1 = Math.sin(a)*r;
-    const x2 = Math.cos(a + 2*Math.PI/3)*r, y2 = Math.sin(a + 2*Math.PI/3)*r;
-    const pts = kochPoints(x1,y1,x2,y2,3);
-    if (s === 0) ctx.moveTo(x1, y1); else ctx.lineTo(x1, y1);
-    pts.forEach(([px,py]) => ctx.lineTo(px, py));
-  }
-  ctx.closePath();
-  ctx.stroke();
-  ctx.restore();
-
-  frameAnimId = requestAnimationFrame(drawFrame);
-};
+let stopMock: (() => void) | undefined;
 
 onMounted(() => {
   window.addEventListener("keydown", onKey);
-  drawFrame();
-  let t = 6;
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const mcuTemplates = [
-    () => `[${pad(Math.floor(t/60))}:${pad(t%60)}] [INFO] CPU usage: ${data.cpu}%`,
-    () => `[${pad(Math.floor(t/60))}:${pad(t%60)}] [INFO] RAM usage: ${data.ram}%`,
-    () => `[${pad(Math.floor(t/60))}:${pad(t%60)}] [INFO] Speed: ${data.speed} mm/s`,
-    () => `[${pad(Math.floor(t/60))}:${pad(t%60)}] [INFO] Servo: ${(data.servo/10).toFixed(1)}°`,
-    () => `[${pad(Math.floor(t/60))}:${pad(t%60)}] [WARN] Frame drop detected`,
-    () => `[${pad(Math.floor(t/60))}:${pad(t%60)}] [INFO] FPS: ${imageStats.fps.toFixed(1)}`,
-  ];
-  const hostTemplates = [
-    () => `[HOST ${pad(Math.floor(t/60))}:${pad(t%60)}] frame received ${188*120*2}B`,
-    () => `[HOST ${pad(Math.floor(t/60))}:${pad(t%60)}] serial rx ${Math.floor(Math.random()*512)+128}B`,
-    () => `[HOST ${pad(Math.floor(t/60))}:${pad(t%60)}] protocol ok 0xCC`,
-    () => `[HOST ${pad(Math.floor(t/60))}:${pad(t%60)}] latency ${Math.floor(Math.random()*8)+2}ms`,
-  ];
-  timerId = window.setInterval(() => {
-    t++;
-    now.value = Date.now();
-    data.cpu = Math.floor(30 + Math.random() * 55);
-    data.ram = Math.floor(42 + Math.random() * 38);
-    data.speed = Math.floor(90 + Math.random() * 390);
-    data.servo = Math.floor(80 + Math.random() * 820);
-    data.networkSpeed = Math.floor(20 + Math.random() * 80);
-    imageStats.fps = 22 + Math.random() * 8;
-    pushPoint(cpuPoints, data.cpu);
-    pushPoint(ramPoints, data.ram);
-    pushPoint(speedPoints, data.speed);
-    pushPoint(networkPoints, data.networkSpeed);
-    const mcu = mcuTemplates[Math.floor(Math.random() * mcuTemplates.length)]();
-    mcuLogs.value = [...mcuLogs.value.slice(-19), mcu];
-    if (Math.random() < 0.6) {
-      const host = hostTemplates[Math.floor(Math.random() * hostTemplates.length)]();
-      hostLogs.value = [...hostLogs.value.slice(-19), host];
+  startAnim();
+  logManager.start();
+
+  // 订阅所有帧：计算 Network RX 吞吐量 + 更新资源数据
+  serialManager.on((event) => {
+    if (event.type !== 'FRAME') return;
+    const f = event.frame;
+    // 按帧类型统计字节数
+    if (f.type === 'IMAGE')    trackRxBytes(22566);
+    else if (f.type === 'LOG') trackRxBytes(4 + f.length);
+    else if (f.type === 'RESOURCE') {
+      trackRxBytes(18);
+      current.value = resourceManager.getCurrentData();
+      const d = current.value!;
+      pushPoint(cpuPoints, d.cpuUsage);
+      pushPoint(ramPoints, d.ramUsage);
+      pushPoint(speedPoints, d.speed);
+      const free = d.freeXDATA + d.freeEDATA;
+      pushPoint(romPoints, Math.round((1 - free / RAM_TOTAL) * 100));
     }
-  }, 1000);
+  });
+
+  // 订阅日志帧
+  logManager.on((event) => {
+    if (event.type !== 'LOG_RECEIVED') return;
+    mcuLogs.value = [...mcuLogs.value.slice(-19), event.entry.text];
+  });
+
+  // 开发模式：无硬件时启动 mock
+  stopMock = startFrontendMock(serialManager);
 });
 
 onUnmounted(() => {
   window.removeEventListener("keydown", onKey);
-  cancelAnimationFrame(frameAnimId);
-  if (timerId !== undefined) window.clearInterval(timerId);
+  stopAnim();
+  logManager.stop();
+  stopMock?.();
 });
 </script>
 
@@ -689,52 +684,6 @@ h1 {
   flex-direction: column;
   min-height: 0;
   max-height: 524px;
-}
-.log-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-}
-.log-title em {
-  font-style: normal;
-  font-size: 9px;
-  padding: 1px 6px;
-  border-radius: 999px;
-}
-.log-title em.live    { background: rgba(32,184,166,.15); color: #20b8a6; }
-.log-title em.offline { background: rgba(239,68,68,.12);  color: #ef4444; }
-[data-theme="dark"] .log-title em.live    { background: rgba(74,222,128,.15); color: #4ade80; }
-[data-theme="dark"] .log-title em.offline { background: rgba(248,113,113,.15); color: #f87171; }
-.mcu-logs,
-.pc-logs {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  overflow-y: auto;
-  flex: 1;
-  min-height: 0;
-}
-.log {
-  padding: 3px 8px;
-  border-radius: 4px;
-  color: var(--text-muted);
-  font-family: "JetBrains Mono", Consolas, monospace;
-  font-size: 11px;
-  line-height: 1.5;
-  flex-shrink: 0;
-}
-.log.warn {
-  color: var(--log-warn-text);
-  background: var(--log-warn-bg);
-}
-.log.err {
-  color: var(--log-err-text);
-  background: var(--log-err-bg);
 }
 .vision-pane {
   position: relative;

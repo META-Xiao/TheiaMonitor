@@ -70,4 +70,4 @@ export class ResourceManager {
   }
 }
 
-export { ProcessedResourceData, ResourceStats } from './resource-processor';
+export type { ProcessedResourceData, ResourceStats } from './resource-processor';
