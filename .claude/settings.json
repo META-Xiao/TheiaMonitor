@@ -1,0 +1,7 @@
+{
+  "model": "claude-sonnet-4-6",
+  "enabledPlugins": {
+    "ui-ux-pro-max-skill@ui-ux-pro-max-skill": true,
+    "context-mode": true
+  }
+}
