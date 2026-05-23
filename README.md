@@ -15,11 +15,11 @@
 
 | 帧类型 | ID | 大小 | 频率 |
 |--------|-----|------|------|
-| 图传 | 0xCC | 22570 B | 25 FPS |
+| 图传 | 0xCC | 22566 B | 25 FPS |
 | 日志 | 0xDD | 4+N B | 5 Hz |
 | 资源 | 0xEE | 18 B | 5 Hz |
 
-详见 [telemetry_protocol.md](../project/doc/telemetry_protocol.md)
+详见 [telemetry_protocol.md](docs/telemetry_protocol.md)
 
 ## 项目结构
 
