@@ -36,7 +36,7 @@ describe('Integration: Real-world scenarios', () => {
       logFrameData[2] = logBytes.length & 0xFF;
       logFrameData.set(logBytes, 3);
       const logChecksum = calculateChecksum(
-        logFrameData.slice(1, 3 + logBytes.length),
+        logFrameData.slice(0, 3 + logBytes.length),
       );
       logFrameData[3 + logBytes.length] = logChecksum;
       frames.push(logFrameData);
@@ -46,19 +46,14 @@ describe('Integration: Real-world scenarios', () => {
       resourceFrameData[0] = FRAME_TYPE.RESOURCE;
       resourceFrameData[1] = 45; // cpuUsage: 45%
       resourceFrameData[2] = 62; // ramUsage: 62%
-      resourceFrameData[3] = 0x00; // freeXDATA: 8000
-      resourceFrameData[4] = 0x1F;
-      resourceFrameData[5] = 0xA0; // freeEDATA: 7584
-      resourceFrameData[6] = 0x1D;
-      resourceFrameData[7] = 0xE8; // speed: 500 mm/s
-      resourceFrameData[8] = 0x01;
-      resourceFrameData[9] = 0xB4; // servoAngle: 180 (18°×10)
-      resourceFrameData[10] = 0x00;
-      resourceFrameData.set(new Uint8Array(6), 11);
-      const resourceChecksum = calculateChecksum(
-        resourceFrameData.slice(1, 17),
-      );
-      resourceFrameData[18] = resourceChecksum;
+      resourceFrameData[3] = 0x1F; resourceFrameData[4] = 0x40; // freeHeap: 8000
+      resourceFrameData[5] = 0x1D; resourceFrameData[6] = 0xA0; // freeStack: 7584
+      resourceFrameData[7] = 0x60; resourceFrameData[8] = 0x00; // ramTotal: 24576
+      resourceFrameData[9] = 0x01; resourceFrameData[10] = 0xF4; // speed: 500 mm/s
+      resourceFrameData[11] = 0x00; resourceFrameData[12] = 0xB4; // servoAngle: 180
+      resourceFrameData.set(new Uint8Array(4), 13);
+      const resourceChecksum = calculateChecksum(resourceFrameData.slice(0, 17));
+      resourceFrameData[17] = resourceChecksum;
       frames.push(resourceFrameData);
 
       // 合并所有帧
@@ -100,7 +95,7 @@ describe('Integration: Real-world scenarios', () => {
         frameData[1] = (logBytes.length >> 8) & 0xFF;
         frameData[2] = logBytes.length & 0xFF;
         frameData.set(logBytes, 3);
-        const checksum = calculateChecksum(frameData.slice(1, 3 + logBytes.length));
+        const checksum = calculateChecksum(frameData.slice(0, 3 + logBytes.length));
         frameData[3 + logBytes.length] = checksum;
         return frameData;
       };
@@ -126,7 +121,7 @@ describe('Integration: Real-world scenarios', () => {
 
       // 验证收到所有消息
       const logFrames = results.filter(
-        (r) => r instanceof LogFrame || (r && 'type' in r && r.type === 'LOG'),
+        (r) => 'type' in r && r.type === 'LOG',
       ) as LogFrame[];
       expect(logFrames).toHaveLength(logMessages.length);
 
@@ -147,7 +142,7 @@ describe('Integration: Real-world scenarios', () => {
       frame1Data[2] = logBytes1.length & 0xFF;
       frame1Data.set(logBytes1, 3);
       frame1Data[3 + logBytes1.length] = calculateChecksum(
-        frame1Data.slice(1, 3 + logBytes1.length),
+        frame1Data.slice(0, 3 + logBytes1.length),
       );
 
       // 插入一些垃圾字节
@@ -162,7 +157,7 @@ describe('Integration: Real-world scenarios', () => {
       frame2Data[2] = logBytes2.length & 0xFF;
       frame2Data.set(logBytes2, 3);
       frame2Data[3 + logBytes2.length] = calculateChecksum(
-        frame2Data.slice(1, 3 + logBytes2.length),
+        frame2Data.slice(0, 3 + logBytes2.length),
       );
 
       // 合并：frame1 + garbage + frame2
@@ -177,7 +172,7 @@ describe('Integration: Real-world scenarios', () => {
 
       // 应该解析出两个有效帧（忽略垃圾数据）
       const validFrames = results.filter(
-        (r) => r instanceof LogFrame || (r && 'type' in r && r.type === 'LOG'),
+        (r) => 'type' in r && r.type === 'LOG',
       ) as LogFrame[];
 
       expect(validFrames.length).toBeGreaterThanOrEqual(1);
@@ -197,17 +192,14 @@ describe('Integration: Real-world scenarios', () => {
       frameData[0] = FRAME_TYPE.RESOURCE;
       frameData[1] = 0; // cpuUsage: 0%
       frameData[2] = 100; // ramUsage: 100%
-      frameData[3] = 0; // freeXDATA: 0
-      frameData[4] = 0;
-      frameData[5] = 0; // freeEDATA: 0
-      frameData[6] = 0;
-      frameData[7] = 0xFF; // speed: -256 mm/s (negative max)
-      frameData[8] = 0xFF;
-      frameData[9] = 0xFF; // servoAngle: -256 (negative max)
-      frameData[10] = 0xFF;
-      frameData.set(new Uint8Array(6), 11);
-      const checksum = calculateChecksum(frameData.slice(1, 17));
-      frameData[18] = checksum;
+      frameData[3] = 0; frameData[4] = 0; // freeHeap: 0
+      frameData[5] = 0; frameData[6] = 0; // freeStack: 0
+      frameData[7] = 0x60; frameData[8] = 0x00; // ramTotal: 24576
+      frameData[9] = 0xFF; frameData[10] = 0xFF; // speed: -1
+      frameData[11] = 0xFF; frameData[12] = 0xFF; // servoAngle: -1
+      frameData.set(new Uint8Array(4), 13);
+      const checksum = calculateChecksum(frameData.slice(0, 17));
+      frameData[17] = checksum;
 
       const results = parser.parse(frameData);
       expect(results).toHaveLength(1);
@@ -216,8 +208,8 @@ describe('Integration: Real-world scenarios', () => {
       const frame = results[0] as ResourceFrame;
       expect(frame.cpuUsage).toBe(0);
       expect(frame.ramUsage).toBe(100);
-      expect(frame.freeXDATA).toBe(0);
-      expect(frame.freeEDATA).toBe(0);
+      expect(frame.freeHeap).toBe(0);
+      expect(frame.freeStack).toBe(0);
       expect(frame.speed).toBeLessThan(0);
       expect(frame.servoAngle).toBeLessThan(0);
     });
@@ -235,7 +227,7 @@ describe('Integration: Real-world scenarios', () => {
       frameData[2] = logBytes.length & 0xFF;
       frameData.set(logBytes, 3);
       frameData[3 + logBytes.length] = calculateChecksum(
-        frameData.slice(1, 3 + logBytes.length),
+        frameData.slice(0, 3 + logBytes.length),
       );
 
       const results = parser.parse(frameData);

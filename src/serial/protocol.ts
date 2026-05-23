@@ -8,23 +8,25 @@ export const FRAME_TYPE = {
 } as const;
 
 export const FRAME_SIZE = {
-  IMAGE: 22566,     // 0xCC: 1(ID) + 2(Frame) + 1(FPS_cam) + 1(FPS_out) + 22560(data) + 1(checksum)
+  IMAGE: 22568,     // 0xCC: 1(ID) + 2(Frame) + 1(FPS_cam) + 1(FPS_out) + 1(width) + 1(height) + 22560(data) + 1(checksum)
   LOG_MAX: 260,     // 0xDD: 1 + 2 + 256 + 1 = 260
-  RESOURCE: 18,     // 0xEE: 1 + 1 + 1 + 2 + 2 + 2 + 2 + 6 + 1 = 18
+  RESOURCE: 18,     // 0xEE: 1(ID)+1(CPU)+1(RAM)+2(freeHeap)+2(freeStack)+2(ramTotal)+2(Speed)+2(ServoAngle)+4(Reserved)+1(Checksum)
 } as const;
 
 export const BAUDRATE = 115200;
 
 /**
- * 图传帧 (0xCC) - 22566 字节
- * 帧结构: ID(1) + Frame(2) + FPS_cam(1) + FPS_out(1) + ImageData(22560) + Checksum(1)
+ * 图传帧 (0xCC) - 22568 字节
+ * 帧结构: ID(1) + Frame(2) + FPS_cam(1) + FPS_out(1) + Width(1) + Height(1) + ImageData(W×H) + Checksum(1)
  */
 export interface ImageFrame {
   type: 'IMAGE';
   frameId: number;        // 2字节 uint16 大端
-  fpsCam: number;         // 1字节 摄像头帧率（固定100）
-  fpsOut: number;         // 1字节 输出帧率（固定25）
-  imageData: Uint8Array;  // 22560字节 188×120灰度
+  fpsCam: number;         // 1字节 摄像头帧率
+  fpsOut: number;         // 1字节 输出帧率
+  width: number;          // 1字节 图像宽度（像素）
+  height: number;         // 1字节 图像高度（像素）
+  imageData: Uint8Array;  // width×height 字节灰度图
   checksum: number;       // 1字节
 }
 
@@ -39,17 +41,19 @@ export interface LogFrame {
 }
 
 /**
- * 资源帧 (0xEE) - 18 字节
+ * 资源帧 (0xEE) - 20 字节
+ * 帧结构: ID(1) + CPUUsage(1) + RAMUsage(1) + freeHeap(2) + freeStack(2) + ramTotal(2) + Speed(2) + ServoAngle(2) + Reserved(4) + Checksum(1)
  */
 export interface ResourceFrame {
   type: 'RESOURCE';
   cpuUsage: number;       // 1字节 (%)
   ramUsage: number;       // 1字节 (%)
-  freeXDATA: number;      // 2字节
-  freeEDATA: number;      // 2字节
+  freeHeap: number;       // 2字节 剩余堆内存字节数
+  freeStack: number;      // 2字节 剩余栈内存字节数
+  ramTotal: number;       // 2字节 总内存字节数（MCU自报）
   speed: number;          // 2字节 (int16, mm/s)
   servoAngle: number;     // 2字节 (int16, 度×10)
-  reserved: Uint8Array;   // 6字节
+  reserved: Uint8Array;   // 4字节
   checksum: number;       // 1字节
 }
 

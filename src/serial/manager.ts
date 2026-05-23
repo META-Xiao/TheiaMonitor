@@ -145,6 +145,7 @@ export class TelemetrySerialManager {
         if (!this.isReading) break;
 
         // 解析帧
+        console.debug('[MCU RX]', bytes);
         const results = this.frameParser.parse(bytes);
 
         for (const result of results) {

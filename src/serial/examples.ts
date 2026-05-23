@@ -167,10 +167,10 @@ function handleResourceFrame(frame: ResourceFrame) {
   console.log(`  CPU 占用: ${frame.cpuUsage}%`);
   console.log(`  RAM 占用: ${frame.ramUsage}%`);
   console.log(
-    `  XDATA 剩余: ${frame.freeXDATA} / 16384 字节 (${((frame.freeXDATA / 16384) * 100).toFixed(1)}% 可用)`,
+    `  Heap 剩余: ${frame.freeHeap} / ${frame.ramTotal} 字节`,
   );
   console.log(
-    `  EDATA 剩余: ${frame.freeEDATA} / 8192 字节 (${((frame.freeEDATA / 8192) * 100).toFixed(1)}% 可用)`,
+    `  Stack 剩余: ${frame.freeStack} / ${frame.ramTotal} 字节`,
   );
   console.log(`  速度: ${(frame.speed / 1000).toFixed(2)} m/s`);
   console.log(`  舵机角度: ${(frame.servoAngle / 10).toFixed(1)}°`);
@@ -182,8 +182,8 @@ function handleResourceFrame(frame: ResourceFrame) {
 interface DashboardState {
   cpuUsage: number;
   ramUsage: number;
-  xdataUsage: number;
-  edataUsage: number;
+  heapUsage: number;
+  stackUsage: number;
   speed: number;
   servoAngle: number;
 }
@@ -191,30 +191,28 @@ interface DashboardState {
 const dashboardState: DashboardState = {
   cpuUsage: 0,
   ramUsage: 0,
-  xdataUsage: 0,
-  edataUsage: 0,
+  heapUsage: 0,
+  stackUsage: 0,
   speed: 0,
   servoAngle: 0,
 };
 
 function updateDashboard(frame: ResourceFrame) {
   // 计算占用率百分比
-  const xdataUsage = ((16384 - frame.freeXDATA) / 163.84); // 百分比
-  const edataUsage = ((8192 - frame.freeEDATA) / 81.92);  // 百分比
+  const heapUsage  = frame.ramTotal > 0 ? ((frame.ramTotal - frame.freeHeap)  / frame.ramTotal * 100) : 0;
+  const stackUsage = frame.ramTotal > 0 ? ((frame.ramTotal - frame.freeStack) / frame.ramTotal * 100) : 0;
 
-  // 更新状态
-  dashboardState.cpuUsage = frame.cpuUsage;
-  dashboardState.ramUsage = frame.ramUsage;
-  dashboardState.xdataUsage = xdataUsage;
-  dashboardState.edataUsage = edataUsage;
-  dashboardState.speed = frame.speed;
+  dashboardState.cpuUsage   = frame.cpuUsage;
+  dashboardState.ramUsage   = frame.ramUsage;
+  dashboardState.heapUsage  = heapUsage;
+  dashboardState.stackUsage = stackUsage;
+  dashboardState.speed      = frame.speed;
   dashboardState.servoAngle = frame.servoAngle;
 
-  // 更新 UI
-  updateProgressBar('cpu-bar', frame.cpuUsage);
-  updateProgressBar('ram-bar', frame.ramUsage);
-  updateProgressBar('xdata-bar', xdataUsage);
-  updateProgressBar('edata-bar', edataUsage);
+  updateProgressBar('cpu-bar',   frame.cpuUsage);
+  updateProgressBar('ram-bar',   frame.ramUsage);
+  updateProgressBar('heap-bar',  heapUsage);
+  updateProgressBar('stack-bar', stackUsage);
 
   document.getElementById('speed-value')!.textContent =
     (frame.speed / 1000).toFixed(2) + ' m/s';

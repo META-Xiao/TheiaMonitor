@@ -7,9 +7,6 @@ import { ImageProcessManager } from '../serial/image-manager';
 import { startFrontendMock } from '../serial/__tests__/frontend-mock';
 
 const HISTORY = 12;
-const XDATA_TOTAL = 16384;
-const EDATA_TOTAL = 8192;
-const RAM_TOTAL = XDATA_TOTAL + EDATA_TOTAL;
 
 export const serialManager = new TelemetrySerialManager();
 const resourceManager = new ResourceManager();
@@ -75,7 +72,7 @@ serialManager.on((event) => {
     pushPoint(cpuPoints, d.cpuUsage);
     pushPoint(ramPoints, d.ramUsage);
     pushPoint(speedPoints, d.speed);
-    pushPoint(romPoints, Math.round((1 - (d.freeXDATA + d.freeEDATA) / RAM_TOTAL) * 100));
+    pushPoint(romPoints, d.ramTotal > 0 ? Math.round((1 - (d.freeHeap + d.freeStack) / d.ramTotal) * 100) : 0);
   }
 });
 imageManager.on((event) => {
@@ -92,7 +89,8 @@ export function useTelemetry() {
   const ramVal = computed(() => hasSignal.value ? current.value!.ramUsage : null);
   const romVal = computed(() => {
     if (!hasSignal.value) return null;
-    return Math.round((1 - (current.value!.freeXDATA + current.value!.freeEDATA) / RAM_TOTAL) * 100);
+    const d = current.value!;
+    return d.ramTotal > 0 ? Math.round((1 - (d.freeHeap + d.freeStack) / d.ramTotal) * 100) : 0;
   });
   const speedMs = computed(() => hasSignal.value ? (current.value!.speed / 1000).toFixed(2) : null);
   const servoDeg = computed(() => hasSignal.value ? (current.value!.servoAngle / 10).toFixed(1) : null);
@@ -109,7 +107,9 @@ export function useTelemetry() {
     if (refCount++ === 0) {
       logManager.start();
       imageManager.start();
-      stopMock = startFrontendMock(serialManager);
+      if (import.meta.env.MODE === 'development') {
+        stopMock = startFrontendMock(serialManager);
+      }
     }
   });
 
@@ -125,6 +125,7 @@ export function useTelemetry() {
   return {
     serialManager,
     resourceManager,
+    imageManager,
     current,
     mcuLogs,
     imageFps,

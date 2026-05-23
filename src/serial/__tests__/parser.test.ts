@@ -53,8 +53,10 @@ describe('FrameParser', () => {
       frameData[1] = length & 0xFF;
       frameData.set(logBytes, 2);
 
-      // 计算校验和（不含帧头）
-      const dataToCheck = frameData.slice(0, 2 + length);
+      // 计算校验和（含帧头）
+      const dataToCheck = new Uint8Array(1 + 2 + length);
+      dataToCheck[0] = FRAME_TYPE.LOG;
+      dataToCheck.set(frameData.slice(0, 2 + length), 1);
       const checksum = calculateChecksum(dataToCheck);
       frameData[2 + length] = checksum;
 
@@ -78,8 +80,8 @@ describe('FrameParser', () => {
     it('should handle empty log frame', () => {
       // 空日志：length = 0
       const frameData = new Uint8Array([0x00, 0x00, 0x00]);
-      const dataToCheck = frameData.slice(0, 2);
-      frameData[2] = calculateChecksum(dataToCheck);
+      const emptyCheck = new Uint8Array([FRAME_TYPE.LOG, 0x00, 0x00]);
+      frameData[2] = calculateChecksum(emptyCheck);
 
       const frame = new Uint8Array(1 + frameData.length);
       frame[0] = FRAME_TYPE.LOG;
@@ -104,8 +106,10 @@ describe('FrameParser', () => {
       frameData[1] = 0x00; // 256 in big-endian
       frameData.set(logBytes, 2);
 
-      const dataToCheck = frameData.slice(0, 2 + 256);
-      frameData[2 + 256] = calculateChecksum(dataToCheck);
+      const maxCheck = new Uint8Array(1 + 2 + 256);
+      maxCheck[0] = FRAME_TYPE.LOG;
+      maxCheck.set(frameData.slice(0, 2 + 256), 1);
+      frameData[2 + 256] = calculateChecksum(maxCheck);
 
       const frame = new Uint8Array(1 + frameData.length);
       frame[0] = FRAME_TYPE.LOG;
@@ -164,17 +168,16 @@ describe('FrameParser', () => {
       const frameData = new Uint8Array(17);
       frameData[0] = 50; // cpuUsage: 50%
       frameData[1] = 75; // ramUsage: 75%
-      frameData[2] = 0x34; // freeXDATA: 0x1234 (little-endian)
-      frameData[3] = 0x12;
-      frameData[4] = 0x78; // freeEDATA: 0x5678 (little-endian)
-      frameData[5] = 0x56;
-      frameData[6] = 0x64; // speed: 0x0064 = 100 mm/s (little-endian)
-      frameData[7] = 0x00;
-      frameData[8] = 0xC8; // servoAngle: 0x00C8 = 200 (×10 = 20°) (little-endian)
-      frameData[9] = 0x00;
-      frameData.set(new Uint8Array(6), 10); // reserved
+      frameData[2] = 0x12; frameData[3] = 0x34; // freeHeap: 0x1234
+      frameData[4] = 0x56; frameData[5] = 0x78; // freeStack: 0x5678
+      frameData[6] = 0x60; frameData[7] = 0x00; // ramTotal: 24576
+      frameData[8] = 0x00; frameData[9] = 0x64; // speed: 100 mm/s
+      frameData[10] = 0x00; frameData[11] = 0xC8; // servoAngle: 200
+      frameData.set(new Uint8Array(4), 12); // reserved
 
-      const dataToCheck = frameData.slice(0, 16);
+      const dataToCheck = new Uint8Array(17);
+      dataToCheck[0] = FRAME_TYPE.RESOURCE;
+      dataToCheck.set(frameData.slice(0, 16), 1);
       const checksum = calculateChecksum(dataToCheck);
       frameData[16] = checksum;
 
@@ -190,29 +193,28 @@ describe('FrameParser', () => {
       expect(resourceFrame.type).toBe('RESOURCE');
       expect(resourceFrame.cpuUsage).toBe(50);
       expect(resourceFrame.ramUsage).toBe(75);
-      expect(resourceFrame.freeXDATA).toBe(0x1234);
-      expect(resourceFrame.freeEDATA).toBe(0x5678);
+      expect(resourceFrame.freeHeap).toBe(0x1234);
+      expect(resourceFrame.freeStack).toBe(0x5678);
+      expect(resourceFrame.ramTotal).toBe(24576);
       expect(resourceFrame.speed).toBe(100);
       expect(resourceFrame.servoAngle).toBe(200);
     });
 
     it('should handle negative speed (int16)', () => {
       const frameData = new Uint8Array(17);
-      frameData[0] = 50; // cpuUsage
-      frameData[1] = 75; // ramUsage
-      frameData[2] = 0x34;
-      frameData[3] = 0x12;
-      frameData[4] = 0x78;
-      frameData[5] = 0x56;
-      // speed: -100 as int16 = 0xFF9C (little-endian)
-      frameData[6] = 0x9C;
-      frameData[7] = 0xFF;
-      frameData[8] = 0xC8;
-      frameData[9] = 0x00;
-      frameData.set(new Uint8Array(6), 10);
+      frameData[0] = 50; frameData[1] = 75;
+      frameData[2] = 0x12; frameData[3] = 0x34; // freeHeap
+      frameData[4] = 0x56; frameData[5] = 0x78; // freeStack
+      frameData[6] = 0x60; frameData[7] = 0x00; // ramTotal
+      // speed: -100 as int16 = 0xFF9C (big-endian)
+      frameData[8] = 0xFF; frameData[9] = 0x9C;
+      frameData[10] = 0x00; frameData[11] = 0xC8;
+      frameData.set(new Uint8Array(4), 12);
 
-      const dataToCheck = frameData.slice(0, 16);
-      frameData[16] = calculateChecksum(dataToCheck);
+      const dataToCheck2 = new Uint8Array(17);
+      dataToCheck2[0] = FRAME_TYPE.RESOURCE;
+      dataToCheck2.set(frameData.slice(0, 16), 1);
+      frameData[16] = calculateChecksum(dataToCheck2);
 
       const frame = new Uint8Array(1 + frameData.length);
       frame[0] = FRAME_TYPE.RESOURCE;
@@ -236,7 +238,9 @@ describe('FrameParser', () => {
         frameData[1] = length & 0xFF;
         frameData.set(logBytes, 2);
 
-        const dataToCheck = frameData.slice(0, 2 + length);
+        const dataToCheck = new Uint8Array(1 + 2 + length);
+        dataToCheck[0] = FRAME_TYPE.LOG;
+        dataToCheck.set(frameData.slice(0, 2 + length), 1);
         frameData[2 + length] = calculateChecksum(dataToCheck);
 
         const frame = new Uint8Array(1 + frameData.length);
@@ -270,7 +274,9 @@ describe('FrameParser', () => {
       frameData[1] = length & 0xFF;
       frameData.set(logBytes, 2);
 
-      const dataToCheck = frameData.slice(0, 2 + length);
+      const dataToCheck = new Uint8Array(1 + 2 + length);
+      dataToCheck[0] = FRAME_TYPE.LOG;
+      dataToCheck.set(frameData.slice(0, 2 + length), 1);
       frameData[2 + length] = calculateChecksum(dataToCheck);
 
       const fullFrame = new Uint8Array(1 + frameData.length);
@@ -304,8 +310,10 @@ describe('FrameParser', () => {
       frameData[1] = length & 0xFF;
       frameData.set(logBytes, 2);
 
-      const dataToCheck = frameData.slice(0, 2 + length);
-      frameData[2 + length] = calculateChecksum(dataToCheck);
+      const dataToCheck2 = new Uint8Array(1 + 2 + length);
+      dataToCheck2[0] = FRAME_TYPE.LOG;
+      dataToCheck2.set(frameData.slice(0, 2 + length), 1);
+      frameData[2 + length] = calculateChecksum(dataToCheck2);
 
       const validFrame = new Uint8Array(1 + frameData.length);
       validFrame[0] = FRAME_TYPE.LOG;
@@ -319,7 +327,7 @@ describe('FrameParser', () => {
       const results = parser.parse(combined);
       // 应该忽略无效字节，成功解析有效帧
       const validFrames = results.filter(
-        (r) => r instanceof LogFrame && r.logData === 'Valid',
+        (r) => 'type' in r && r.type === 'LOG' && (r as LogFrame).logData === 'Valid',
       );
       expect(validFrames).toHaveLength(1);
     });

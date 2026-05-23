@@ -102,12 +102,10 @@ const canvasEl = ref<HTMLCanvasElement>();
 const logs = computed(() => mcuLogs.value.slice(-20));
 const fps = imageFps;
 
-const XDATA_TOTAL = 16384, EDATA_TOTAL = 8192, RAM_TOTAL = XDATA_TOTAL + EDATA_TOTAL;
-
 const NS = 'No Signal';
 const ALL_CARDS = computed(() => {
   const d = current.value;
-  const romPct = d ? Math.round((1 - (d.freeXDATA + d.freeEDATA) / RAM_TOTAL) * 100) : null;
+  const romPct = d && d.ramTotal > 0 ? Math.round((1 - (d.freeHeap + d.freeStack) / d.ramTotal) * 100) : null;
   return [
     { id: 'cpu',     label: 'CPU',        value: d ? `${d.cpuUsage}%`                      : NS, color: '#242424', points: cpuPoints.value,     max: 100,  isServo: false },
     { id: 'ram',     label: 'RAM',        value: d ? `${d.ramUsage}%`                      : NS, color: '#20b8a6', points: ramPoints.value,     max: 100,  isServo: false },

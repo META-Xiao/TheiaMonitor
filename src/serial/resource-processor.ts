@@ -3,8 +3,9 @@ import { ResourceFrame } from './protocol';
 export interface ProcessedResourceData {
   cpuUsage: number;
   ramUsage: number;
-  freeXDATA: number;
-  freeEDATA: number;
+  freeHeap: number;
+  freeStack: number;
+  ramTotal: number;
   speed: number;
   servoAngle: number;
   timestamp: number;
@@ -39,8 +40,9 @@ export class ResourceFrameProcessor {
     const processed: ProcessedResourceData = {
       cpuUsage: frame.cpuUsage,
       ramUsage: frame.ramUsage,
-      freeXDATA: frame.freeXDATA,
-      freeEDATA: frame.freeEDATA,
+      freeHeap: frame.freeHeap,
+      freeStack: frame.freeStack,
+      ramTotal: frame.ramTotal,
       speed: frame.speed,
       servoAngle: frame.servoAngle,
       timestamp: Date.now(),

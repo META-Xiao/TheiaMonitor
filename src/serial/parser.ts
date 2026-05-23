@@ -127,24 +127,36 @@ export class FrameParser {
   }
 
   /**
-   * 读图传帧数据：frameId(2) + fps(1) + imageData(22560) + checksum(1)
+   * 读图传帧数据：frameId(2) + fpsCam(1) + fpsOut(1) + width(1) + height(1) + imageData(W×H) + checksum(1)
+   * 注意：帧头读到时 targetSize 已设为 FRAME_SIZE.IMAGE-1，但 width/height 在前6字节里，
+   * 实际 imageData 大小 = width × height，需动态确定。
+   * 为简化状态机，先读前6字节确定尺寸，再读剩余数据。
    */
   private handleImageData(byte: number): TelemetryFrame | null {
     this.buffer[this.bufferPos++] = byte;
 
-    if (this.bufferPos < this.targetSize) {
-      return null; // 继续读取
+    // 前6字节：frameId(2) + fpsCam(1) + fpsOut(1) + width(1) + height(1)
+    if (this.bufferPos === 6) {
+      const w = this.buffer[4];
+      const h = this.buffer[5];
+      this.targetSize = 6 + w * h + 1; // +1 for checksum
     }
 
-    // 已读取完毕：22569字节（不含帧头）
-    const frameId =
-      (this.buffer[0] << 8) | this.buffer[1];
-    const fps = this.buffer[2];
-    const imageData = this.buffer.slice(3, 3 + FRAME_SIZE.IMAGE - 1 - 3 - 1);
+    if (this.bufferPos < this.targetSize || this.targetSize === 0) {
+      return null;
+    }
+
+    const frameId = (this.buffer[0] << 8) | this.buffer[1];
+    const fpsCam = this.buffer[2];
+    const fpsOut = this.buffer[3];
+    const width = this.buffer[4];
+    const height = this.buffer[5];
+    const imageData = this.buffer.slice(6, 6 + width * height);
     const checksum = this.buffer[this.bufferPos - 1];
 
-    // 校验：计算前 bufferPos-1 字节的校验和
-    const dataToCheck = this.buffer.slice(0, this.bufferPos - 1);
+    const dataToCheck = new Uint8Array(1 + this.bufferPos - 1);
+    dataToCheck[0] = FRAME_TYPE.IMAGE;
+    dataToCheck.set(this.buffer.slice(0, this.bufferPos - 1), 1);
     if (!verifyChecksum(dataToCheck, checksum)) {
       throw new FrameParseError(
         'IMAGE_CHECKSUM_ERROR',
@@ -157,7 +169,10 @@ export class FrameParser {
     const frame: ImageFrame = {
       type: 'IMAGE',
       frameId,
-      fps,
+      fpsCam,
+      fpsOut,
+      width,
+      height,
       imageData: new Uint8Array(imageData),
       checksum,
     };
@@ -201,8 +216,10 @@ export class FrameParser {
     const logDataBytes = this.buffer.slice(2, 2 + length);
     const checksum = this.buffer[this.bufferPos - 1];
 
-    // 校验
-    const dataToCheck = this.buffer.slice(0, this.bufferPos - 1);
+    // 校验：MCU 的 checksum 包含帧头字节 0xDD
+    const dataToCheck = new Uint8Array(1 + this.bufferPos - 1);
+    dataToCheck[0] = FRAME_TYPE.LOG;
+    dataToCheck.set(this.buffer.slice(0, this.bufferPos - 1), 1);
     if (!verifyChecksum(dataToCheck, checksum)) {
       throw new FrameParseError(
         'LOG_CHECKSUM_ERROR',
@@ -243,22 +260,20 @@ export class FrameParser {
       return null; // 继续读取
     }
 
-    // 解析字段（采用小端字节序）
     const cpuUsage = this.buffer[0];
     const ramUsage = this.buffer[1];
-    const freeXDATA =
-      (this.buffer[3] << 8) | this.buffer[2];
-    const freeEDATA =
-      (this.buffer[5] << 8) | this.buffer[4];
-    const speed =
-      ((this.buffer[7] & 0x80) ? -(0x10000 - ((this.buffer[7] << 8) | this.buffer[6])) : ((this.buffer[7] << 8) | this.buffer[6]));
-    const servoAngle =
-      ((this.buffer[9] & 0x80) ? -(0x10000 - ((this.buffer[9] << 8) | this.buffer[8])) : ((this.buffer[9] << 8) | this.buffer[8]));
-    const reserved = this.buffer.slice(10, 16);
+    const freeHeap  = (this.buffer[2] << 8) | this.buffer[3];
+    const freeStack = (this.buffer[4] << 8) | this.buffer[5];
+    const ramTotal  = (this.buffer[6] << 8) | this.buffer[7];
+    const speed = ((this.buffer[8] & 0x80) ? -(0x10000 - ((this.buffer[8] << 8) | this.buffer[9])) : ((this.buffer[8] << 8) | this.buffer[9]));
+    const servoAngle = ((this.buffer[10] & 0x80) ? -(0x10000 - ((this.buffer[10] << 8) | this.buffer[11])) : ((this.buffer[10] << 8) | this.buffer[11]));
+    const reserved = this.buffer.slice(12, 16);
     const checksum = this.buffer[16];
 
-    // 校验
-    const dataToCheck = this.buffer.slice(0, 16);
+    // 校验：MCU 的 checksum 包含帧头字节 0xEE
+    const dataToCheck = new Uint8Array(1 + 16);
+    dataToCheck[0] = FRAME_TYPE.RESOURCE;
+    dataToCheck.set(this.buffer.slice(0, 16), 1);
     if (!verifyChecksum(dataToCheck, checksum)) {
       throw new FrameParseError(
         'RESOURCE_CHECKSUM_ERROR',
@@ -272,8 +287,9 @@ export class FrameParser {
       type: 'RESOURCE',
       cpuUsage,
       ramUsage,
-      freeXDATA,
-      freeEDATA,
+      freeHeap,
+      freeStack,
+      ramTotal,
       speed,
       servoAngle,
       reserved,

@@ -17,7 +17,7 @@ describe('ImageFrameProcessor', () => {
     processor = new ImageFrameProcessor({
       imageWidth: WIDTH,
       imageHeight: HEIGHT,
-      fpsOut: 25,
+      fps: 25,
     });
   });
 
@@ -31,7 +31,10 @@ describe('ImageFrameProcessor', () => {
     const frame: ImageFrame = {
       type: 'IMAGE',
       frameId: 100,
+      fpsCam: 100,
       fpsOut: 25,
+      width: WIDTH,
+      height: HEIGHT,
       imageData,
       checksum: 0,
     };
@@ -54,7 +57,10 @@ describe('ImageFrameProcessor', () => {
     const frame: ImageFrame = {
       type: 'IMAGE',
       frameId: 1,
+      fpsCam: 100,
       fpsOut: 25,
+      width: WIDTH,
+      height: HEIGHT,
       imageData,
       checksum: 0,
     };
@@ -81,7 +87,10 @@ describe('ImageFrameProcessor', () => {
     const frame: ImageFrame = {
       type: 'IMAGE',
       frameId: 1,
+      fpsCam: 100,
       fpsOut: 25,
+      width: WIDTH,
+      height: HEIGHT,
       imageData,
       checksum: 0,
     };
@@ -95,7 +104,10 @@ describe('ImageFrameProcessor', () => {
     const frame1: ImageFrame = {
       type: 'IMAGE',
       frameId: 1,
+      fpsCam: 100,
       fpsOut: 25,
+      width: WIDTH,
+      height: HEIGHT,
       imageData,
       checksum: 0,
     };
@@ -106,7 +118,10 @@ describe('ImageFrameProcessor', () => {
     const frame2: ImageFrame = {
       type: 'IMAGE',
       frameId: 2,
+      fpsCam: 100,
       fpsOut: 25,
+      width: WIDTH,
+      height: HEIGHT,
       imageData,
       checksum: 0,
     };
@@ -122,7 +137,10 @@ describe('ImageFrameProcessor', () => {
     const frame: ImageFrame = {
       type: 'IMAGE',
       frameId: 1,
+      fpsCam: 100,
       fpsOut: 25,
+      width: WIDTH,
+      height: HEIGHT,
       imageData,
       checksum: 0,
     };
@@ -144,7 +162,7 @@ describe('ImageDataStore', () => {
     processor = new ImageFrameProcessor({
       imageWidth: 188,
       imageHeight: 120,
-      fpsOut: 25,
+      fps: 25,
     });
   });
 

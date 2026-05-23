@@ -14,11 +14,12 @@ describe('ResourceFrameProcessor', () => {
       type: 'RESOURCE',
       cpuUsage: 45,
       ramUsage: 60,
-      freeXDATA: 1024,
-      freeEDATA: 512,
+      freeHeap: 1024,
+      freeStack: 512,
+      ramTotal: 24576,
       speed: 100,
       servoAngle: 500,
-      reserved: new Uint8Array(6),
+      reserved: new Uint8Array(4),
       checksum: 0,
     };
 
@@ -26,8 +27,8 @@ describe('ResourceFrameProcessor', () => {
 
     expect(processed.cpuUsage).toBe(45);
     expect(processed.ramUsage).toBe(60);
-    expect(processed.freeXDATA).toBe(1024);
-    expect(processed.freeEDATA).toBe(512);
+    expect(processed.freeHeap).toBe(1024);
+    expect(processed.freeStack).toBe(512);
     expect(processed.speed).toBe(100);
     expect(processed.servoAngle).toBe(500);
     expect(processed.timestamp).toBeGreaterThan(0);
@@ -38,11 +39,12 @@ describe('ResourceFrameProcessor', () => {
       type: 'RESOURCE',
       cpuUsage: 105,
       ramUsage: 50,
-      freeXDATA: 1024,
-      freeEDATA: 512,
+      freeHeap: 1024,
+      freeStack: 512,
+      ramTotal: 24576,
       speed: 100,
       servoAngle: 500,
-      reserved: new Uint8Array(6),
+      reserved: new Uint8Array(4),
       checksum: 0,
     };
 
@@ -54,11 +56,12 @@ describe('ResourceFrameProcessor', () => {
       type: 'RESOURCE',
       cpuUsage: -1,
       ramUsage: 50,
-      freeXDATA: 1024,
-      freeEDATA: 512,
+      freeHeap: 1024,
+      freeStack: 512,
+      ramTotal: 24576,
       speed: 100,
       servoAngle: 500,
-      reserved: new Uint8Array(6),
+      reserved: new Uint8Array(4),
       checksum: 0,
     };
 
@@ -70,11 +73,12 @@ describe('ResourceFrameProcessor', () => {
       type: 'RESOURCE',
       cpuUsage: 50,
       ramUsage: 105,
-      freeXDATA: 1024,
-      freeEDATA: 512,
+      freeHeap: 1024,
+      freeStack: 512,
+      ramTotal: 24576,
       speed: 100,
       servoAngle: 500,
-      reserved: new Uint8Array(6),
+      reserved: new Uint8Array(4),
       checksum: 0,
     };
 
@@ -86,11 +90,12 @@ describe('ResourceFrameProcessor', () => {
       type: 'RESOURCE',
       cpuUsage: 50,
       ramUsage: -1,
-      freeXDATA: 1024,
-      freeEDATA: 512,
+      freeHeap: 1024,
+      freeStack: 512,
+      ramTotal: 24576,
       speed: 100,
       servoAngle: 500,
-      reserved: new Uint8Array(6),
+      reserved: new Uint8Array(4),
       checksum: 0,
     };
 
@@ -102,11 +107,12 @@ describe('ResourceFrameProcessor', () => {
       type: 'RESOURCE',
       cpuUsage: 50,
       ramUsage: 60,
-      freeXDATA: 1024,
-      freeEDATA: 512,
+      freeHeap: 1024,
+      freeStack: 512,
+      ramTotal: 24576,
       speed: 100,
       servoAngle: 500,
-      reserved: new Uint8Array(6),
+      reserved: new Uint8Array(4),
       checksum: 0,
     };
 
@@ -124,11 +130,12 @@ describe('ResourceFrameProcessor', () => {
       type: 'RESOURCE',
       cpuUsage: 50,
       ramUsage: 60,
-      freeXDATA: 1024,
-      freeEDATA: 512,
+      freeHeap: 1024,
+      freeStack: 512,
+      ramTotal: 24576,
       speed: 100,
       servoAngle: 500,
-      reserved: new Uint8Array(6),
+      reserved: new Uint8Array(4),
       checksum: 0,
     };
 
@@ -144,11 +151,12 @@ describe('ResourceFrameProcessor', () => {
       type: 'RESOURCE',
       cpuUsage: 0,
       ramUsage: 100,
-      freeXDATA: 0,
-      freeEDATA: 65535,
+      freeHeap: 0,
+      freeStack: 65535,
+      ramTotal: 24576,
       speed: -32768,
       servoAngle: 32767,
-      reserved: new Uint8Array(6),
+      reserved: new Uint8Array(4),
       checksum: 0,
     };
 
@@ -169,8 +177,9 @@ describe('ResourceDataStore', () => {
     const data: ProcessedResourceData = {
       cpuUsage: 50,
       ramUsage: 60,
-      freeXDATA: 1024,
-      freeEDATA: 512,
+      freeHeap: 1024,
+      freeStack: 512,
+      ramTotal: 24576,
       speed: 100,
       servoAngle: 500,
       timestamp: Date.now(),
@@ -184,8 +193,9 @@ describe('ResourceDataStore', () => {
     const data: ProcessedResourceData = {
       cpuUsage: 50,
       ramUsage: 60,
-      freeXDATA: 1024,
-      freeEDATA: 512,
+      freeHeap: 1024,
+      freeStack: 512,
+      ramTotal: 24576,
       speed: 100,
       servoAngle: 500,
       timestamp: Date.now(),
@@ -202,8 +212,9 @@ describe('ResourceDataStore', () => {
     const data1: ProcessedResourceData = {
       cpuUsage: 50,
       ramUsage: 60,
-      freeXDATA: 1024,
-      freeEDATA: 512,
+      freeHeap: 1024,
+      freeStack: 512,
+      ramTotal: 24576,
       speed: 100,
       servoAngle: 500,
       timestamp: Date.now(),
@@ -212,8 +223,9 @@ describe('ResourceDataStore', () => {
     const data2: ProcessedResourceData = {
       cpuUsage: 60,
       ramUsage: 70,
-      freeXDATA: 2048,
-      freeEDATA: 1024,
+      freeHeap: 2048,
+      freeStack: 1024,
+      ramTotal: 24576,
       speed: 200,
       servoAngle: 600,
       timestamp: Date.now() + 100,
@@ -232,8 +244,9 @@ describe('ResourceDataStore', () => {
     store.storeData({
       cpuUsage: 40,
       ramUsage: 50,
-      freeXDATA: 1000,
-      freeEDATA: 500,
+      freeHeap: 1000,
+      freeStack: 500,
+      ramTotal: 24576,
       speed: 100,
       servoAngle: 400,
       timestamp: Date.now(),
@@ -242,8 +255,9 @@ describe('ResourceDataStore', () => {
     store.storeData({
       cpuUsage: 60,
       ramUsage: 70,
-      freeXDATA: 2000,
-      freeEDATA: 1000,
+      freeHeap: 2000,
+      freeStack: 1000,
+      ramTotal: 24576,
       speed: 200,
       servoAngle: 600,
       timestamp: Date.now() + 100,
@@ -270,8 +284,9 @@ describe('ResourceDataStore', () => {
       store.storeData({
         cpuUsage: i,
         ramUsage: i,
-        freeXDATA: i * 100,
-        freeEDATA: i * 50,
+        freeHeap: i * 100,
+        freeStack: i * 50,
+        ramTotal: 24576,
         speed: i * 10,
         servoAngle: i * 20,
         timestamp: Date.now() + i * 100,
@@ -287,8 +302,9 @@ describe('ResourceDataStore', () => {
     store.storeData({
       cpuUsage: 50,
       ramUsage: 60,
-      freeXDATA: 1024,
-      freeEDATA: 512,
+      freeHeap: 1024,
+      freeStack: 512,
+      ramTotal: 24576,
       speed: 100,
       servoAngle: 500,
       timestamp: now - 1000,
@@ -297,8 +313,9 @@ describe('ResourceDataStore', () => {
     store.storeData({
       cpuUsage: 60,
       ramUsage: 70,
-      freeXDATA: 2048,
-      freeEDATA: 1024,
+      freeHeap: 2048,
+      freeStack: 1024,
+      ramTotal: 24576,
       speed: 200,
       servoAngle: 600,
       timestamp: now,
@@ -324,8 +341,9 @@ describe('ResourceDataStore', () => {
     store.storeData({
       cpuUsage: 50,
       ramUsage: 60,
-      freeXDATA: 1024,
-      freeEDATA: 512,
+      freeHeap: 1024,
+      freeStack: 512,
+      ramTotal: 24576,
       speed: 100,
       servoAngle: 500,
       timestamp: Date.now(),
@@ -346,8 +364,9 @@ describe('ResourceDataStore', () => {
     store.storeData({
       cpuUsage: 50,
       ramUsage: 60,
-      freeXDATA: 1024,
-      freeEDATA: 512,
+      freeHeap: 1024,
+      freeStack: 512,
+      ramTotal: 24576,
       speed: 100,
       servoAngle: 500,
       timestamp: Date.now(),
@@ -362,8 +381,9 @@ describe('ResourceDataStore', () => {
       store.storeData({
         cpuUsage: 50 + i,
         ramUsage: 60 + i,
-        freeXDATA: 1024,
-        freeEDATA: 512,
+        freeHeap: 1024,
+        freeStack: 512,
+        ramTotal: 24576,
         speed: 100 + i * 10,
         servoAngle: 500 + i * 10,
         timestamp: Date.now() + i * 100,
@@ -379,8 +399,9 @@ describe('ResourceDataStore', () => {
     store.storeData({
       cpuUsage: 50,
       ramUsage: 60,
-      freeXDATA: 1024,
-      freeEDATA: 512,
+      freeHeap: 1024,
+      freeStack: 512,
+      ramTotal: 24576,
       speed: -100,
       servoAngle: 500,
       timestamp: Date.now(),
@@ -389,8 +410,9 @@ describe('ResourceDataStore', () => {
     store.storeData({
       cpuUsage: 50,
       ramUsage: 60,
-      freeXDATA: 1024,
-      freeEDATA: 512,
+      freeHeap: 1024,
+      freeStack: 512,
+      ramTotal: 24576,
       speed: 100,
       servoAngle: 500,
       timestamp: Date.now() + 100,

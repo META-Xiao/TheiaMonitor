@@ -39,6 +39,7 @@ describe('ImageProcessManager', () => {
     return {
       type: 'IMAGE',
       frameId,
+      fpsCam: 100,
       fpsOut: 25,
       imageData,
       checksum: 0,
@@ -246,7 +247,8 @@ describe('ImageProcessManager', () => {
       frame: {
         type: 'IMAGE',
         frameId: 1,
-        fpsOut: 25,
+        fpsCam: 100,
+      fpsOut: 25,
         imageData: new Uint8Array(100), // 错误的大小会触发错误
         checksum: 0,
       } as any,

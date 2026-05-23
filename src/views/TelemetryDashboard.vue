@@ -174,7 +174,7 @@ import { useTelemetry } from "../composables/useTelemetry";
 import { conn } from "../stores/connection";
 
 const {
-  current, mcuLogs, imageFps,
+  current, mcuLogs, imageFps, imageManager,
   cpuPoints, ramPoints, romPoints, speedPoints, networkPoints,
   networkRxKbps, networkRxLabel,
   cpuVal, ramVal, romVal, speedMs, servoDeg, servoVisualDeg,
@@ -233,6 +233,20 @@ const onBottomTab = (i: number) => {
 
 const imageCanvas = ref<HTMLCanvasElement>();
 const { start: startAnim, stop: stopAnim } = useCanvasAnimation(imageCanvas);
+let unsubImage: (() => void) | null = null;
+
+function drawNoSignal() {
+  const c = imageCanvas.value;
+  const ctx = c?.getContext('2d');
+  if (!c || !ctx) return;
+  ctx.fillStyle = '#0a0e1a';
+  ctx.fillRect(0, 0, c.width, c.height);
+  ctx.fillStyle = 'rgba(255,255,255,0.35)';
+  ctx.font = 'bold 14px Inter, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('No Signal', c.width / 2, c.height / 2);
+}
 
 const resourceCards = computed(() => [
   { name: "CPU", value: cpuVal.value, unit: "%",  color: "#242424", points: cpuPoints.value },
@@ -250,11 +264,23 @@ const hostLogs = ref([
 
 onMounted(() => {
   window.addEventListener("keydown", onKey);
-  startAnim();
+  drawNoSignal();
+  unsubImage = imageManager.on((event) => {
+    if (event.type !== 'IMAGE_RECEIVED') return;
+    stopAnim();
+    const c = imageCanvas.value;
+    const ctx = c?.getContext('2d');
+    if (!c || !ctx) return;
+    const { width, height, pixelData } = event.data;
+    c.width = width;
+    c.height = height;
+    ctx.putImageData(new ImageData(pixelData, width, height), 0, 0);
+  });
 });
 onUnmounted(() => {
   window.removeEventListener("keydown", onKey);
   stopAnim();
+  unsubImage?.();
 });
 </script>
 

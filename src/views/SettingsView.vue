@@ -237,6 +237,7 @@ import { Icon } from "@iconify/vue";
 import AppSelect from "../components/AppSelect.vue";
 import { conn } from "../stores/connection";
 import { usePlatform } from "../composables/usePlatform";
+import { serialManager } from "../composables/useTelemetry";
 
 const sections = [
   { id: "serial", icon: "lucide:cable", label: "Serial" },
@@ -459,15 +460,20 @@ const onLangChange = (v: string | number) => {
   display.lang = String(v);
 };
 
-const toggleConnect = () => {
-  serial.connected = !serial.connected;
-  conn.connected = serial.connected;
+const toggleConnect = async () => {
   if (serial.connected) {
-    conn.portLabel = serial.portLabel || serial.channel.toUpperCase();
-    conn.mcuName = "MCU";
-    conn.connectedAt = Date.now();
+    await serialManager.disconnect();
+    serial.connected = false;
   } else {
-    conn.connectedAt = null;
+    try {
+      await serialManager.selectPort();
+      await serialManager.connect(serial.baud);
+      serial.connected = true;
+      conn.portLabel = serial.portLabel || serial.channel.toUpperCase();
+      conn.mcuName = "MCU";
+    } catch (e) {
+      console.error("Connect failed:", e);
+    }
   }
 };
 </script>

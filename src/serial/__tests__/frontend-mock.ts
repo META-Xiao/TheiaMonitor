@@ -29,6 +29,8 @@ export function startFrontendMock(serialManager: TelemetrySerialManager): () => 
         frameId: mockFrameId++ & 0xFFFF,
         fpsCam: 100,
         fpsOut: 25,
+        width: 188,
+        height: 120,
         imageData: IMAGE_DATA,
         checksum: 0,
       },
@@ -41,18 +43,18 @@ export function startFrontendMock(serialManager: TelemetrySerialManager): () => 
     const ram  = Math.floor(42 + Math.random() * 38);
     const speed = Math.floor(90 + Math.random() * 390);
     const servo = Math.floor(80 + Math.random() * 820);
-    // freeXDATA: 0~16384, freeEDATA: 0~8192，模拟 30%~80% 剩余
-    const freeXDATA = Math.floor(16384 * (0.3 + Math.random() * 0.5));
-    const freeEDATA = Math.floor(8192  * (0.3 + Math.random() * 0.5));
+    const ramTotal = 24576;
+    const freeHeap  = Math.floor(16384 * (0.3 + Math.random() * 0.5));
+    const freeStack = Math.floor(8192  * (0.3 + Math.random() * 0.5));
 
     serialManager.emit({
       type: 'FRAME',
       frame: {
         type: 'RESOURCE',
         cpuUsage: cpu, ramUsage: ram,
-        freeXDATA, freeEDATA,
+        freeHeap, freeStack, ramTotal,
         speed, servoAngle: servo,
-        reserved: new Uint8Array(6),
+        reserved: new Uint8Array(4),
         checksum: 0,
       },
     });
