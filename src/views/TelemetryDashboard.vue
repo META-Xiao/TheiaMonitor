@@ -213,7 +213,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { Icon } from "@iconify/vue";
 import SettingsView from "./SettingsView.vue";
 import VisionView from "./VisionView.vue";
@@ -236,6 +236,12 @@ const NETWORK_ID = 'network';
 const shownIds = ref<string[]>(
   resourceSlots.map(s => `slot_${s.id}`).concat([NETWORK_ID])
 );
+
+// keep shownIds in sync when slots are deleted
+watch(() => resourceSlots.length, () => {
+  const existing = new Set(resourceSlots.map(s => `slot_${s.id}`));
+  shownIds.value = shownIds.value.filter(id => id === NETWORK_ID || existing.has(id));
+});
 
 const hiddenSlotCards = computed(() => {
   const all = [

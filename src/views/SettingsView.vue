@@ -34,28 +34,42 @@
           <!-- Byte map -->
           <div class="rf-bytemap">
             <div class="rf-bytemap-label">0xEE</div>
-            <div
-              v-for="slot in resourceSlots"
-              :key="slot.id"
-              class="rf-bytemap-seg"
-              :class="{ active: selectedSlot === slot.id, on: slot.enabled }"
-              :style="{ flex: SLOT_BYTES[slot.type] }"
-              @click.stop="selectedSlot = selectedSlot === slot.id ? -1 : slot.id"
-              :title="`res[${slot.id}] · ${slot.label}`"
-            >
-              <button
-                v-if="slot.enabled"
-                class="rf-seg-close"
-                @click.stop="slot.enabled = false; if (selectedSlot === slot.id) selectedSlot = -1"
-              ><Icon icon="lucide:x" /></button>
-              <button
+            <!-- Fixed protocol slots: can be disabled (bytes stay, shown as hollow) -->
+            <template v-for="slot in resourceSlots" :key="slot.id">
+              <div
+                v-if="slot.id < DEFAULT_SLOT_COUNT"
+                class="rf-bytemap-seg"
+                :class="{ active: selectedSlot === slot.id, disabled: !slot.enabled }"
+                :style="{ flex: SLOT_BYTES[slot.type] }"
+                @click.stop="slot.enabled ? (selectedSlot = selectedSlot === slot.id ? -1 : slot.id) : (slot.enabled = true)"
+                :title="`res[${slot.id}] · ${slot.label}`"
+              >
+                <button
+                  v-if="slot.enabled"
+                  class="rf-seg-close"
+                  @click.stop="slot.enabled = false; if (selectedSlot === slot.id) selectedSlot = -1"
+                ><Icon icon="lucide:x" /></button>
+                <button v-else class="rf-seg-add" @click.stop="slot.enabled = true"><Icon icon="lucide:plus" /></button>
+                <span class="rf-bytemap-name">{{ slot.enabled ? slot.label : 'Rsv' }}</span>
+                <span class="rf-bytemap-sz">{{ slot.type }}</span>
+              </div>
+              <!-- Custom slots: × removes entirely, bytes return to Rsv -->
+              <div
                 v-else
-                class="rf-seg-add"
-                @click.stop="slot.enabled = true"
-              ><Icon icon="lucide:plus" /></button>
-              <span class="rf-bytemap-name">{{ slot.label }}</span>
-              <span class="rf-bytemap-sz">{{ slot.type }}</span>
-            </div>
+                class="rf-bytemap-seg"
+                :class="{ active: selectedSlot === slot.id }"
+                :style="{ flex: SLOT_BYTES[slot.type] }"
+                @click.stop="selectedSlot = selectedSlot === slot.id ? -1 : slot.id"
+                :title="`res[${slot.id}] · ${slot.label}`"
+              >
+                <button
+                  class="rf-seg-close"
+                  @click.stop="removeSlot(slot.id); if (selectedSlot === slot.id) selectedSlot = -1"
+                ><Icon icon="lucide:x" /></button>
+                <span class="rf-bytemap-name">{{ slot.label }}</span>
+                <span class="rf-bytemap-sz">{{ slot.type }}</span>
+              </div>
+            </template>
             <!-- Reserved remainder -->
             <div
               v-if="reservedBytes > 0"
@@ -687,7 +701,7 @@ h1 {
   background: rgba(32, 184, 166, 0.1);
 }
 
-.rf-bytemap-seg:not(.on):not(.chk) {
+.rf-bytemap-seg.disabled {
   opacity: 0.32;
   background: repeating-linear-gradient(
     45deg,
