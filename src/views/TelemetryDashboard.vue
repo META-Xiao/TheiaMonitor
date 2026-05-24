@@ -67,11 +67,11 @@
       <section class="content-layout">
         <div class="left-column">
           <section class="telemetry-card">
-            <section class="telemetry-zone">
+            <section class="telemetry-zone" @click="tzPickerOpen = false">
               <div
-                v-for="card in overviewCards"
+                v-for="card in visibleOverviewCards"
                 :key="card.id"
-                class="mini-card resource-card"
+                class="mini-card resource-card tz-card"
               >
                 <ServoCard v-if="card.isServo"
                   :deg="servoDeg ?? '--'"
@@ -83,7 +83,21 @@
                   :points="card.points"
                   :max="card.max"
                 />
+                <button class="tz-remove" @click.stop="removeOverviewCard(card.id)"><Icon icon="lucide:x" /></button>
               </div>
+              <button
+                v-if="visibleOverviewCards.length < 6 && hiddenSlotCards.length"
+                class="mini-card resource-card tz-add-btn"
+                @click.stop="openTzPicker"
+                ref="tzAddBtnEl"
+              >
+                <Icon icon="lucide:plus" /><span>Add</span>
+              </button>
+              <Teleport to="body">
+                <div v-if="tzPickerOpen" class="tz-picker" :style="tzPickerStyle" @click.stop>
+                  <button v-for="c in hiddenSlotCards" :key="c.id" @click="addOverviewCard(c.id)">{{ c.label }}</button>
+                </div>
+              </Teleport>
             </section>
 
             <aside class="mcu-card">
@@ -208,6 +222,7 @@ import ServoCard from "../components/ServoCard.vue";
 import { useCanvasAnimation } from "../composables/useCanvasAnimation";
 import { useTelemetry } from "../composables/useTelemetry";
 import { conn } from "../stores/connection";
+import { resourceSlots } from "../stores/resourceSlots";
 
 const {
   current, mcuLogs, imageFps, imageManager, serialManager,
@@ -215,6 +230,54 @@ const {
   servoDeg, servoVisualDeg,
   overviewCards,
 } = useTelemetry();
+
+// telemetry-zone add/remove
+const NETWORK_ID = 'network';
+const shownIds = ref<string[]>(resourceSlots.filter(s => s.enabled).map(s => `slot_${s.id}`).concat([NETWORK_ID]));
+
+const hiddenSlotCards = computed(() => {
+  const all = [
+    ...resourceSlots.map(s => ({ id: `slot_${s.id}`, label: s.label })),
+    { id: NETWORK_ID, label: 'Network RX' },
+  ];
+  return all.filter(c => !shownIds.value.includes(c.id));
+});
+
+function removeOverviewCard(id: string) {
+  shownIds.value = shownIds.value.filter(x => x !== id);
+  if (id !== NETWORK_ID) {
+    const slotId = parseInt(id.replace('slot_', ''));
+    const slot = resourceSlots.find(s => s.id === slotId);
+    if (slot) slot.enabled = false;
+  }
+}
+
+function addOverviewCard(id: string) {
+  if (shownIds.value.length >= 6) return;
+  shownIds.value = [...shownIds.value, id];
+  if (id !== NETWORK_ID) {
+    const slotId = parseInt(id.replace('slot_', ''));
+    const slot = resourceSlots.find(s => s.id === slotId);
+    if (slot) slot.enabled = true;
+  }
+  tzPickerOpen.value = false;
+}
+
+const tzPickerOpen = ref(false);
+const tzAddBtnEl = ref<HTMLElement>();
+const tzPickerStyle = ref({});
+
+const visibleOverviewCards = computed(() =>
+  overviewCards.value.filter(c => shownIds.value.includes(c.id))
+);
+
+function openTzPicker() {
+  tzPickerOpen.value = true;
+  if (tzAddBtnEl.value) {
+    const r = tzAddBtnEl.value.getBoundingClientRect();
+    tzPickerStyle.value = { top: `${r.bottom + 6}px`, left: `${r.left}px`, minWidth: `${r.width}px` };
+  }
+}
 
 const tabs = ["Overview", "Vision", "Settings"];
 const tabIcons = ["lucide:layout-dashboard", "lucide:video", "lucide:settings"];
@@ -742,6 +805,44 @@ h1 {
 .resource-card {
   padding: 12px;
 }
+.tz-card { position: relative; }
+.tz-remove {
+  position: absolute;
+  top: 5px; right: 5px;
+  width: 18px; height: 18px;
+  border: none; border-radius: 999px;
+  background: transparent; color: var(--text-dim);
+  display: grid; place-items: center;
+  cursor: pointer; font-size: 11px;
+  opacity: 0; transition: opacity 150ms;
+}
+.tz-card:hover .tz-remove { opacity: 1; }
+.tz-add-btn {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 4px; font-size: 12px; font-weight: 700;
+  border: 1.5px dashed var(--card-border);
+  background: transparent; color: var(--text-muted);
+  cursor: pointer; transition: background 150ms;
+}
+.tz-add-btn:hover { background: var(--surface); }
+.tz-picker {
+  position: fixed;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  box-shadow: var(--card-shadow);
+  backdrop-filter: blur(20px);
+  z-index: 500; overflow: hidden;
+}
+.tz-picker button {
+  display: block; width: 100%;
+  padding: 9px 14px; text-align: left;
+  border: none; background: transparent;
+  color: var(--text); font-size: 13px; font-weight: 700;
+  cursor: pointer; transition: background 150ms;
+}
+.tz-picker button:hover { background: var(--surface); }
 .mini-head {
   display: flex;
   align-items: center;
