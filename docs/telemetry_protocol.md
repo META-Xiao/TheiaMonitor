@@ -63,31 +63,30 @@
 
 **帧结构**:
 ```
-┌─────┬──────────┬──────────┬──────────┬───────────┬──────────┬────────────┬──────────────┬──────────┬──────────┐
-│ ID  │ CPUUsage │ RAMUsage │ FreeHeap │ FreeStack │ RamTotal │ Speed      │ ServoAngle   │ Reserved │ Checksum │
-├─────┼──────────┼──────────┼──────────┼───────────┼──────────┼────────────┼──────────────┼──────────┼──────────┤
-│ 0xEE│ (1B) %   │ (1B) %   │ (2B)     │ (2B)      │ (2B)     │ (2B int16) │ (2B int16)   │ (4B)     │ (1B)     │
-└─────┴──────────┴──────────┴──────────┴───────────┴──────────┴────────────┴──────────────┴──────────┴──────────┘
+┌─────┬──────────┬──────────┬──────────┬────────────┬──────────────┬──────────┬──────────┐
+│ ID  │ CPUUsage │ ROM_free │ RAM_free │ Speed      │ ServoAngle   │ Reserved │ Checksum │
+├─────┼──────────┼──────────┼──────────┼────────────┼──────────────┼──────────┼──────────┤
+│ 0xEE│ (1B) %   │ (2B u16) │ (2B u16) │ (2B int16) │ (2B int16)   │ (4B)     │ (1B)     │
+└─────┴──────────┴──────────┴──────────┴────────────┴──────────────┴──────────┴──────────┘
 ```
 
 **字段说明**:
 - `CPUUsage`: CPU 占用率（%，uint8，范围 0-100）
-- `RAMUsage`: RAM 占用率（%，uint8，范围 0-100）
-- `FreeHeap`: 堆剩余字节数（uint16 大端）
-- `FreeStack`: 栈剩余字节数（uint16 大端）
-- `RamTotal`: MCU 自报总内存字节数（uint16 大端）
+- `ROM_free`: Flash 剩余字节数（uint16 大端）；分母 `ROM_TOTAL` 在上位机 Settings → Env 中配置（ATmega32U4 默认 32768）
+- `RAM_free`: SRAM 剩余字节数（uint16 大端）；分母 `RAM_TOTAL` 在上位机 Settings → Env 中配置（ATmega32U4 默认 2560）
 - `Speed`: 前进速度（mm/s，int16 大端，正=前进，负=后退）
 - `ServoAngle`: 舵机偏转角度（int16 大端，单位由 MCU 定义）
-- `Reserved`: 预留 4 字节，填 0
+- `Reserved`: 预留 4 字节，填 0（可通过上位机 Settings → Resources 扩展自定义字段）
 - `Checksum`: 所有字节之和 & 0xFF（含帧头 0xEE）
 
-**总字节数**: 18B（1+1+1+2+2+2+2+2+4+1）  
-**上位机计算**:
+**总字节数**: 15B（1+1+2+2+2+2+4+1）
+
+**上位机计算**（Settings → Env 中配置 `ROM_TOTAL=32768`、`RAM_TOTAL=2560`）:
 ```javascript
-ram_used_pct = RAMUsage;                          // RAM 占用率 %
-heap_used    = RamTotal - FreeHeap;               // 已用堆字节数
-stack_used   = RamTotal - FreeStack;              // 已用栈字节数
-speed_ms     = Speed / 1000.0;                    // 速度 m/s
+rom_used_pct = (ROM_TOTAL - res[1]) / ROM_TOTAL * 100   // res[1] = ROM_free
+ram_used_pct = (RAM_TOTAL - res[2]) / RAM_TOTAL * 100   // res[2] = RAM_free
+speed_ms     = res[3] / 1000.0                          // res[3] = Speed
+servo_deg    = res[4] / 10.0                            // res[4] = ServoAngle
 ```
 
 ---
@@ -122,7 +121,7 @@ checksum = (byte[0] + byte[1] + ... + byte[N-1]) & 0xFF
 |--------|----------|----------|
 | 图传帧 (0xCC) | 22569B（188×120） | ≈ 1960ms |
 | 日志帧 (0xDD) | 4–260B | < 23ms |
-| 资源帧 (0xEE) | 18B | < 2ms |
+| 资源帧 (0xEE) | 15B | < 2ms |
 
 图传帧体积远大于其他帧，MCU 端建议使用异步/DMA 发送以避免阻塞。
 
@@ -152,10 +151,8 @@ while True:
 
     elif byte == 0xEE:        # 资源帧
         cpu       = read_uint8()
-        ram       = read_uint8()
-        free_heap = read_uint16_be()
-        free_stk  = read_uint16_be()
-        ram_total = read_uint16_be()
+        rom_free  = read_uint16_be()
+        ram_free  = read_uint16_be()
         speed     = read_int16_be()
         servo     = read_int16_be()
         reserved  = read_bytes(4)
@@ -165,5 +162,5 @@ while True:
 
 ---
 
-**文档版本**: 2.0  
+**文档版本**: 3.0  
 **更新日期**: 2026-05-24
