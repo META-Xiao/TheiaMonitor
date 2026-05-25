@@ -158,11 +158,17 @@ export class FrameParser {
     const imageData = this.buffer.slice(6, 6 + imageDataSize);
     const checksum = this.buffer[this.bufferPos - 1];
 
-    if (imageDataSize !== width * height) {
-      throw new FrameParseError(
-        'IMAGE_SIZE_MISMATCH',
-        `Image size mismatch: Length implies ${imageDataSize} bytes, but ${width}×${height}=${width * height}`,
-      );
+    /* 兼容灰度(旧)和 RGB565(新) 两种格式，按数据大小自动识别 */
+    {
+      const graySize = width * height;
+      const rgbSize  = width * height * 2;
+      if (imageDataSize !== graySize && imageDataSize !== rgbSize) {
+        throw new FrameParseError(
+          'IMAGE_SIZE_MISMATCH',
+          `Image size mismatch: Length implies ${imageDataSize} bytes, ` +
+          `but ${width}×${height}=${graySize}(gray) or ×2=${rgbSize}(RGB565)`,
+        );
+      }
     }
 
     const dataToCheck = new Uint8Array(1 + this.bufferPos - 1);

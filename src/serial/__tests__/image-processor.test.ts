@@ -23,7 +23,6 @@ describe('ImageFrameProcessor', () => {
 
   it('should process a valid grayscale image frame', () => {
     const imageData = new Uint8Array(TOTAL_PIXELS);
-    // 填充测试数据：0-255渐变
     for (let i = 0; i < TOTAL_PIXELS; i++) {
       imageData[i] = i % 256;
     }
@@ -48,9 +47,8 @@ describe('ImageFrameProcessor', () => {
 
   it('should correctly convert grayscale to RGBA', () => {
     const imageData = new Uint8Array(TOTAL_PIXELS);
-    // 设置简单的测试数据
-    imageData[0] = 128;  // 第一个像素
-    imageData[1] = 255;  // 第二个像素
+    imageData[0] = 128;
+    imageData[1] = 255;
 
     const frame: ImageFrame = {
       type: 'IMAGE',
@@ -65,21 +63,90 @@ describe('ImageFrameProcessor', () => {
     const processed = processor.process(frame);
     const pixels = processed.pixelData;
 
-    // 第一个像素应该是 RGBA(128, 128, 128, 255)
-    expect(pixels[0]).toBe(128);  // R
-    expect(pixels[1]).toBe(128);  // G
-    expect(pixels[2]).toBe(128);  // B
-    expect(pixels[3]).toBe(255);  // A
+    // R=G=B=gray, A=255
+    expect(pixels[0]).toBe(128);
+    expect(pixels[1]).toBe(128);
+    expect(pixels[2]).toBe(128);
+    expect(pixels[3]).toBe(255);
 
-    // 第二个像素应该是 RGBA(255, 255, 255, 255)
-    expect(pixels[4]).toBe(255);  // R
-    expect(pixels[5]).toBe(255);  // G
-    expect(pixels[6]).toBe(255);  // B
-    expect(pixels[7]).toBe(255);  // A
+    expect(pixels[4]).toBe(255);
+    expect(pixels[5]).toBe(255);
+    expect(pixels[6]).toBe(255);
+    expect(pixels[7]).toBe(255);
   });
 
-  it('should reject invalid image data size', () => {
-    const imageData = new Uint8Array(TOTAL_PIXELS - 1); // 错误的大小
+  it('should process a valid RGB565 image frame', () => {
+    const RGB565_SIZE = TOTAL_PIXELS * 2;
+    const imageData = new Uint8Array(RGB565_SIZE);
+    // 填充 RGB565 纯绿色 (0x07E0): hi=0x07, lo=0xE0
+    for (let i = 0; i < TOTAL_PIXELS; i++) {
+      imageData[i * 2]     = 0x07;
+      imageData[i * 2 + 1] = 0xE0;
+    }
+
+    const frame: ImageFrame = {
+      type: 'IMAGE',
+      frameId: 200,
+      length: 4 + RGB565_SIZE,
+      width: WIDTH,
+      height: HEIGHT,
+      imageData,
+      checksum: 0,
+    };
+
+    const processed = processor.process(frame);
+
+    expect(processed.frameId).toBe(200);
+    expect(processed.width).toBe(WIDTH);
+    expect(processed.height).toBe(HEIGHT);
+    expect(processed.pixelData.length).toBe(TOTAL_PIXELS * 4);
+  });
+
+  it('should correctly convert RGB565 to RGBA', () => {
+    const RGB565_SIZE = TOTAL_PIXELS * 2;
+    const imageData = new Uint8Array(RGB565_SIZE);
+
+    // pixel 0: 红色 0xF800 → hi=0xF8, lo=0x00 → R=248, G=0, B=0
+    imageData[0] = 0xF8; imageData[1] = 0x00;
+    // pixel 1: 绿色 0x07E0 → hi=0x07, lo=0xE0 → R=0, G=255, B=0
+    imageData[2] = 0x07; imageData[3] = 0xE0;
+    // pixel 2: 蓝色 0x001F → hi=0x00, lo=0x1F → R=0, G=0, B=248
+    imageData[4] = 0x00; imageData[5] = 0x1F;
+
+    const frame: ImageFrame = {
+      type: 'IMAGE',
+      frameId: 1,
+      length: 4 + RGB565_SIZE,
+      width: WIDTH,
+      height: HEIGHT,
+      imageData,
+      checksum: 0,
+    };
+
+    const processed = processor.process(frame);
+    const pixels = processed.pixelData;
+
+    // red: R≈248, G≈0, B≈0
+    expect(pixels[0]).toBe(248);
+    expect(pixels[1]).toBe(0);
+    expect(pixels[2]).toBe(0);
+    expect(pixels[3]).toBe(255);
+
+    // green: R≈0, G≈252, B≈0 (0x07E0: G=0x3F→0xFC=252)
+    expect(pixels[4]).toBe(0);
+    expect(pixels[5]).toBe(252);
+    expect(pixels[6]).toBe(0);
+    expect(pixels[7]).toBe(255);
+
+    // blue: R≈0, G≈0, B≈248
+    expect(pixels[8]).toBe(0);
+    expect(pixels[9]).toBe(0);
+    expect(pixels[10]).toBe(248);
+    expect(pixels[11]).toBe(255);
+  });
+
+  it('should reject invalid image data size (neither gray nor RGB565)', () => {
+    const imageData = new Uint8Array(TOTAL_PIXELS - 1);
 
     const frame: ImageFrame = {
       type: 'IMAGE',

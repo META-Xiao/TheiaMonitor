@@ -4,7 +4,7 @@ import { TelemetrySerialManager } from '../manager';
  * 前端开发用 mock：通过真实的 TelemetrySerialManager.emit() 注入帧，
  * 驱动 ResourceManager / LogProcessManager，与硬件接入时数据流完全一致。
  */
-const IMAGE_DATA = new Uint8Array(188 * 120); // 灰度全黑占位图
+const IMAGE_DATA = new Uint8Array(188 * 120); // 灰度全黑占位图 (旧格式，兼容测试)
 let mockFrameId = 0;
 
 export function startFrontendMock(serialManager: TelemetrySerialManager): () => void {
@@ -20,14 +20,15 @@ export function startFrontendMock(serialManager: TelemetrySerialManager): () => 
     () => `${ts()} [WARN] Frame drop detected`,
   ];
 
-  // IMAGE 帧 @25fps
+  // IMAGE 帧 @25fps (灰度 188×120，旧格式兼容测试)
+  // 新 MCU 固件输出 RGB565 94×120 时，改 width/height/length 即可
   const imageTimer = setInterval(() => {
     serialManager.emit({
       type: 'FRAME',
       frame: {
         type: 'IMAGE',
         frameId: mockFrameId++ & 0xFFFF,
-        length: 4 + 188 * 120,  // Frame(2) + Width(1) + Height(1) + ImageData
+        length: 4 + 188 * 120,  // Frame(2) + Width(1) + Height(1) + ImageData(grayscale)
         width: 188,
         height: 120,
         imageData: IMAGE_DATA,

@@ -25,7 +25,7 @@ export interface ProcessedImageData {
  *
  * 功能：
  * - 将二进制图像数据转换为可显示的格式
- * - 支持灰度图转 RGBA
+ * - 兼容灰度图 (W×H×1) 和 RGB565 (W×H×2) 两种编码
  * - 缓存处理结果用于显示
  */
 export class ImageFrameProcessor {
@@ -37,26 +37,50 @@ export class ImageFrameProcessor {
   }
 
   /**
-   * 处理图像帧，转换为 RGBA 格式
+   * 处理图像帧，转 RGBA 格式（兼容灰度和 RGB565）
    * @param frame 原始图像帧
    * @returns 处理后的图像数据
    */
   process(frame: ImageFrame): ProcessedImageData {
     const { frameId, width, height, imageData } = frame;
+    const graySize = width * height;
+    const rgbSize  = width * height * 2;
 
-    if (imageData.length !== width * height) {
+    if (imageData.length !== graySize && imageData.length !== rgbSize) {
       throw new Error(
-        `Invalid image data size: expected ${width * height}, got ${imageData.length}`,
+        `Invalid image data size: expected ${graySize}(gray) or ${rgbSize}(RGB565), got ${imageData.length}`,
       );
     }
 
     const pixelData = new Uint8ClampedArray(width * height * 4);
-    for (let i = 0; i < imageData.length; i++) {
-      const g = imageData[i];
-      pixelData[i * 4]     = g;
-      pixelData[i * 4 + 1] = g;
-      pixelData[i * 4 + 2] = g;
-      pixelData[i * 4 + 3] = 255;
+    const pixelCount = width * height;
+
+    if (imageData.length === graySize) {
+      /* 灰度图 (旧格式): R=G=B=gray */
+      for (let i = 0; i < pixelCount; i++) {
+        const g = imageData[i];
+        pixelData[i * 4]     = g;
+        pixelData[i * 4 + 1] = g;
+        pixelData[i * 4 + 2] = g;
+        pixelData[i * 4 + 3] = 255;
+      }
+    } else {
+      /* RGB565 (新格式): 大端序，2字节/像素 */
+      for (let i = 0; i < pixelCount; i++) {
+        const hi = imageData[i * 2];
+        const lo = imageData[i * 2 + 1];
+        const rgb565 = (hi << 8) | lo;
+
+        const r5 = (rgb565 >> 11) & 0x1F;
+        const g6 = (rgb565 >> 5) & 0x3F;
+        const b5 = rgb565 & 0x1F;
+
+        const offset = i * 4;
+        pixelData[offset]     = (r5 << 3) | (r5 >> 2);   // R: 5→8 bit
+        pixelData[offset + 1] = (g6 << 2) | (g6 >> 4);   // G: 6→8 bit
+        pixelData[offset + 2] = (b5 << 3) | (b5 >> 2);   // B: 5→8 bit
+        pixelData[offset + 3] = 255;                      // A
+      }
     }
 
     const processed: ProcessedImageData = {

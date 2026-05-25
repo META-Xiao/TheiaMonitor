@@ -8,16 +8,16 @@ export const FRAME_TYPE = {
 } as const;
 
 export const FRAME_SIZE = {
-  IMAGE_MAX: 65033, // 0xCC: 1+2(Length)+2(Frame)+1(W)+1(H)+255*255(data)+1(CS) — 最大分辨率 255×255
+  IMAGE_MAX: 65033, // 0xCC: 1+2(Length)+2(Frame)+1(W)+1(H)+255*255*2(data-RGB565)+1(CS) — 最大255×255 RGB565
   LOG_MAX: 260,     // 0xDD: 1 + 2 + 256 + 1 = 260
 } as const;
 
 export const BAUDRATE = 115200;
 
 /**
- * 图传帧 (0xCC)
- * 帧结构: ID(1) + Length(2) + Frame(2) + Width(1) + Height(1) + ImageData(W×H) + Checksum(1)
- * Length = Frame(2) + Width(1) + Height(1) + ImageData(W×H) = 4 + W×H
+ * 图传帧 (0xCC) - RGB565 编码
+ * 帧结构: ID(1) + Length(2) + Frame(2) + Width(1) + Height(1) + ImageData(W×H×2) + Checksum(1)
+ * Length = Frame(2) + Width(1) + Height(1) + ImageData(W×H×2) = 4 + W×H×2
  */
 export interface ImageFrame {
   type: 'IMAGE';
@@ -25,7 +25,7 @@ export interface ImageFrame {
   frameId: number;        // 2字节 uint16 大端
   width: number;          // 1字节 图像宽度（像素）
   height: number;         // 1字节 图像高度（像素）
-  imageData: Uint8Array;  // width×height 字节灰度图
+  imageData: Uint8Array;  // width×height×2 字节 RGB565 大端序
   checksum: number;       // 1字节
 }
 

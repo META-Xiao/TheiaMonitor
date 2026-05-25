@@ -13,27 +13,31 @@
 
 ## 2. 帧类型定义
 
-### 2.1 图传帧 (0xCC)
+### 2.1 图传帧 (0xCC) — RGB565 编码
 
 **帧结构**:
 ```
-┌─────┬────────┬───────┬───────┬───────┬──────────────┬──────────┐
-│ ID  │ Length │ Frame │ Width │ Height│ ImageData    │ Checksum │
-├─────┼────────┼───────┼───────┼───────┼──────────────┼──────────┤
-│ 0xCC│ (2B)   │ (2B)  │ (1B)  │ (1B)  │ (W×H bytes)  │ (1B)     │
-└─────┴────────┴───────┴───────┴───────┴──────────────┴──────────┘
+┌─────┬────────┬───────┬───────┬───────┬────────────────┬──────────┐
+│ ID  │ Length │ Frame │ Width │ Height│ ImageData      │ Checksum │
+├─────┼────────┼───────┼───────┼───────┼────────────────┼──────────┤
+│ 0xCC│ (2B)   │ (2B)  │ (1B)  │ (1B)  │ (W×H×2 bytes)  │ (1B)     │
+└─────┴────────┴───────┴───────┴───────┴────────────────┴──────────┘
 ```
 
 **字段说明**:
-- `Length`: 帧头之后、校验和之前的总字节数（uint16 大端），Frame(2) + Width(1) + Height(1) + ImageData(W×H) = 4 + W×H，解析器据此确定帧边界
+- `Length`: 帧头之后、校验和之前的总字节数（uint16 大端），Frame(2) + Width(1) + Height(1) + ImageData(W×H×2) = 4 + W×H×2，解析器据此确定帧边界
 - `Frame`: 帧计数器（0-65535，uint16 大端），上位机通过 Frame 增量 + 时间戳即可评估接收帧率
-- `Width`: 图像宽度（像素，uint8，当前最大 255）
-- `Height`: 图像高度（像素，uint8，当前最大 255）
-- `ImageData`: 原始灰度图像，逐行存储，共 Width×Height 字节
+- `Width`: 图像宽度（像素，uint8，半宽 94 = 188/2）
+- `Height`: 图像高度（像素，uint8，120）
+- `ImageData`: RGB565 编码图像数据，每像素 2 字节（大端序），共 Width×Height×2 字节
+  - 灰度像素：R=G=B，通过 gray→RGB565 转换（保留亮度）
+  - 边界标注：真实 RGB565 颜色（左红 0xF800 / 中绿 0x07E0 / 右蓝 0x001F）
 - `Checksum`: 所有字节之和 & 0xFF（含帧头 0xCC）
 
-**总字节数**: 8 + W×H（例：188×120 → Length=22564，总帧=22568B）  
-**上位机处理**: 先读 Length 确定帧边界，再读 Width/Height 分配缓冲区，解析后 Canvas 显示。即使 Width/Height 在传输中损坏，解析器也能在读取 Length 指定的字节数后重新同步。
+**向后兼容**: 上位机解析器同时兼容旧灰度格式 (W×H×1) 和新 RGB565 格式 (W×H×2)，按 Length 自动识别。
+
+**总字节数**: 8 + W×H×2（例：94×120 RGB565 → Length=4+94×120×2=22564，总帧=22568B）  
+**上位机处理**: 先读 Length 确定帧边界，再读 Width/Height 分配缓冲区。根据数据大小自动选择灰度或 RGB565 解码路径。
 
 ---
 
@@ -152,15 +156,24 @@ checksum = (byte[0] + byte[1] + ... + byte[N-1]) & 0xFF
 while True:
     byte = read_byte()
 
-    if byte == 0xCC:          # 图传帧
+    if byte == 0xCC:          # 图传帧 (RGB565 编码，兼容旧灰度格式)
         length    = read_uint16_be()   # 帧头后总字节数
         frame_id  = read_uint16_be()
         width     = read_uint8()
         height    = read_uint8()
         # ImageData 字节数 = length - 4 (已读 Frame+Width+Height)
-        pixels    = read_bytes(length - 4)
+        data_size = length - 4
+        pixels    = read_bytes(data_size)
         checksum  = read_uint8()
-        # 验证校验和后显示图像
+        # 验证校验和
+        # 按数据大小自动识别格式：
+        #   data_size == W×H     → 灰度图 (旧格式)
+        #   data_size == W×H×2   → RGB565 大端序 (新格式)
+        #   其他                   → 丢弃
+        if data_size == width * height:
+            display_grayscale(pixels, width, height)
+        elif data_size == width * height * 2:
+            display_rgb565(pixels, width, height)
 
     elif byte == 0xDD:        # 日志帧
         length    = read_uint16_be()   # 最大 256
