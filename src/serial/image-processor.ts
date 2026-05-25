@@ -14,7 +14,6 @@ export interface ImageProcessingConfig {
  */
 export interface ProcessedImageData {
   frameId: number;        // 帧ID
-  fpsOut: number;         // 输出帧率（来自帧头 FPS_out 字段）
   width: number;          // 宽度
   height: number;         // 高度
   pixelData: Uint8ClampedArray;  // RGBA 格式像素数据
@@ -43,7 +42,7 @@ export class ImageFrameProcessor {
    * @returns 处理后的图像数据
    */
   process(frame: ImageFrame): ProcessedImageData {
-    const { frameId, fpsOut, width, height, imageData } = frame;
+    const { frameId, width, height, imageData } = frame;
 
     if (imageData.length !== width * height) {
       throw new Error(
@@ -62,7 +61,6 @@ export class ImageFrameProcessor {
 
     const processed: ProcessedImageData = {
       frameId,
-      fpsOut,
       width,
       height,
       pixelData,

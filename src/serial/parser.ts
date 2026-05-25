@@ -104,7 +104,7 @@ export class FrameParser {
         this.currentFrameType = FRAME_TYPE.IMAGE;
         this.state = FrameParseState.READ_IMAGE_DATA;
         this.bufferPos = 0;
-        this.targetSize = FRAME_SIZE.IMAGE - 1; // 不含帧头本身
+        this.targetSize = 0; // 先读 Length 字段动态确定大小
         return null;
 
       case FRAME_TYPE.LOG:
@@ -128,37 +128,43 @@ export class FrameParser {
   }
 
   /**
-   * 读图传帧数据：frameId(2) + fpsCam(1) + fpsOut(1) + width(1) + height(1) + imageData(W×H) + checksum(1)
-   * 注意：帧头读到时 targetSize 已设为 FRAME_SIZE.IMAGE-1，但 width/height 在前6字节里，
-   * 实际 imageData 大小 = width × height，需动态确定。
-   * 为简化状态机，先读前6字节确定尺寸，再读剩余数据。
+   * 读图传帧数据：Length(2) + Frame(2) + Width(1) + Height(1) + ImageData(W×H) + Checksum(1)
+   * 先读前2字节获取 Length，动态确定帧边界，再按 Length 读取剩余数据。
    */
   private handleImageData(byte: number): TelemetryFrame | null {
     this.buffer[this.bufferPos++] = byte;
 
-    // 前6字节：frameId(2) + fpsCam(1) + fpsOut(1) + width(1) + height(1)
-    if (this.bufferPos === 6) {
-      const w = this.buffer[4];
-      const h = this.buffer[5];
-      this.targetSize = 6 + w * h + 1; // +1 for checksum
+    // 前2字节为 Length
+    if (this.bufferPos === 2) {
+      const length = (this.buffer[0] << 8) | this.buffer[1];
+      // targetSize = Length字段(2) + 数据体(length) + checksum(1)
+      this.targetSize = length + 3;
       if (this.buffer.length < this.targetSize) {
         const grown = new Uint8Array(this.targetSize);
-        grown.set(this.buffer.slice(0, 6));
+        grown.set(this.buffer.slice(0, 2));
         this.buffer = grown;
       }
-    }
-
-    if (this.bufferPos < this.targetSize || this.targetSize === 0) {
       return null;
     }
 
-    const frameId = (this.buffer[0] << 8) | this.buffer[1];
-    const fpsCam = this.buffer[2];
-    const fpsOut = this.buffer[3];
+    if (this.bufferPos < this.targetSize) {
+      return null;
+    }
+
+    const length = (this.buffer[0] << 8) | this.buffer[1];
+    const frameId = (this.buffer[2] << 8) | this.buffer[3];
     const width = this.buffer[4];
     const height = this.buffer[5];
-    const imageData = this.buffer.slice(6, 6 + width * height);
+    const imageDataSize = length - 4; // 减去 Frame(2)+Width(1)+Height(1)
+    const imageData = this.buffer.slice(6, 6 + imageDataSize);
     const checksum = this.buffer[this.bufferPos - 1];
+
+    if (imageDataSize !== width * height) {
+      throw new FrameParseError(
+        'IMAGE_SIZE_MISMATCH',
+        `Image size mismatch: Length implies ${imageDataSize} bytes, but ${width}×${height}=${width * height}`,
+      );
+    }
 
     const dataToCheck = new Uint8Array(1 + this.bufferPos - 1);
     dataToCheck[0] = FRAME_TYPE.IMAGE;
@@ -174,9 +180,8 @@ export class FrameParser {
 
     const frame: ImageFrame = {
       type: 'IMAGE',
+      length,
       frameId,
-      fpsCam,
-      fpsOut,
       width,
       height,
       imageData: new Uint8Array(imageData),

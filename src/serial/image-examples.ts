@@ -41,7 +41,7 @@ async function basicExample() {
   imageManager.on((event: ImageProcessEvent) => {
     switch (event.type) {
       case 'IMAGE_RECEIVED':
-        console.log(`收到图像帧: ID=${event.data.frameId}, FPS_out=${event.data.fpsOut}`);
+        console.log(`收到图像帧: ID=${event.data.frameId}`);
         renderImageToCanvas(event.data);
         break;
 

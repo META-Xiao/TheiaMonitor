@@ -27,8 +27,7 @@ export function startFrontendMock(serialManager: TelemetrySerialManager): () => 
       frame: {
         type: 'IMAGE',
         frameId: mockFrameId++ & 0xFFFF,
-        fpsCam: 100,
-        fpsOut: 25,
+        length: 4 + 188 * 120,  // Frame(2) + Width(1) + Height(1) + ImageData
         width: 188,
         height: 120,
         imageData: IMAGE_DATA,
