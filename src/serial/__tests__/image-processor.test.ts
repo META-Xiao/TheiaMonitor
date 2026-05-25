@@ -106,11 +106,11 @@ describe('ImageFrameProcessor', () => {
     const RGB565_SIZE = TOTAL_PIXELS * 2;
     const imageData = new Uint8Array(RGB565_SIZE);
 
-    // pixel 0: 红色 0xF800 → hi=0xF8, lo=0x00 → R=248, G=0, B=0
+    // pixel 0: 红色 0xF800 → R5=31 → R8=255
     imageData[0] = 0xF8; imageData[1] = 0x00;
-    // pixel 1: 绿色 0x07E0 → hi=0x07, lo=0xE0 → R=0, G=255, B=0
+    // pixel 1: 绿色 0x07E0 → G6=63 → G8=255
     imageData[2] = 0x07; imageData[3] = 0xE0;
-    // pixel 2: 蓝色 0x001F → hi=0x00, lo=0x1F → R=0, G=0, B=248
+    // pixel 2: 蓝色 0x001F → B5=31 → B8=255
     imageData[4] = 0x00; imageData[5] = 0x1F;
 
     const frame: ImageFrame = {
@@ -126,22 +126,22 @@ describe('ImageFrameProcessor', () => {
     const processed = processor.process(frame);
     const pixels = processed.pixelData;
 
-    // red: R≈248, G≈0, B≈0
-    expect(pixels[0]).toBe(248);
+    // red 0xF800: R5=31→R8=255
+    expect(pixels[0]).toBe(255);
     expect(pixels[1]).toBe(0);
     expect(pixels[2]).toBe(0);
     expect(pixels[3]).toBe(255);
 
-    // green: R≈0, G≈252, B≈0 (0x07E0: G=0x3F→0xFC=252)
+    // green 0x07E0: G6=63→G8=255
     expect(pixels[4]).toBe(0);
-    expect(pixels[5]).toBe(252);
+    expect(pixels[5]).toBe(255);
     expect(pixels[6]).toBe(0);
     expect(pixels[7]).toBe(255);
 
-    // blue: R≈0, G≈0, B≈248
+    // blue 0x001F: B5=31→B8=255
     expect(pixels[8]).toBe(0);
     expect(pixels[9]).toBe(0);
-    expect(pixels[10]).toBe(248);
+    expect(pixels[10]).toBe(255);
     expect(pixels[11]).toBe(255);
   });
 
