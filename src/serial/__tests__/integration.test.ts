@@ -41,19 +41,21 @@ describe('Integration: Real-world scenarios', () => {
       logFrameData[3 + logBytes.length] = logChecksum;
       frames.push(logFrameData);
 
-      // === 构造资源帧 ===
-      const resourceFrameData = new Uint8Array(1 + 17);
+      // === 构造资源帧 (0xEE + Length(2) + Data(9B) + CS(1)) ===
+      const resPayload = new Uint8Array(2 + 9);
+      resPayload[0] = 0; resPayload[1] = 9;  // Length = 9
+      resPayload[2] = 45;                     // CPU(u8)
+      resPayload[3] = 0x1F; resPayload[4] = 0x40; // ROM(u16)
+      resPayload[5] = 0x1D; resPayload[6] = 0xA0; // RAM(u16)
+      resPayload[7] = 0x01; resPayload[8] = 0xF4; // Speed(i16)
+      resPayload[9] = 0x00; resPayload[10] = 0xB4; // Servo(i16)
+      const resCS = new Uint8Array(1 + resPayload.length);
+      resCS[0] = FRAME_TYPE.RESOURCE;
+      resCS.set(resPayload, 1);
+      const resourceFrameData = new Uint8Array(resCS.length + 1);
       resourceFrameData[0] = FRAME_TYPE.RESOURCE;
-      resourceFrameData[1] = 45; // cpuUsage: 45%
-      resourceFrameData[2] = 62; // ramUsage: 62%
-      resourceFrameData[3] = 0x1F; resourceFrameData[4] = 0x40; // freeHeap: 8000
-      resourceFrameData[5] = 0x1D; resourceFrameData[6] = 0xA0; // freeStack: 7584
-      resourceFrameData[7] = 0x60; resourceFrameData[8] = 0x00; // ramTotal: 24576
-      resourceFrameData[9] = 0x01; resourceFrameData[10] = 0xF4; // speed: 500 mm/s
-      resourceFrameData[11] = 0x00; resourceFrameData[12] = 0xB4; // servoAngle: 180
-      resourceFrameData.set(new Uint8Array(4), 13);
-      const resourceChecksum = calculateChecksum(resourceFrameData.slice(0, 17));
-      resourceFrameData[17] = resourceChecksum;
+      resourceFrameData.set(resPayload, 1);
+      resourceFrameData[resourceFrameData.length - 1] = calculateChecksum(resCS);
       frames.push(resourceFrameData);
 
       // 合并所有帧
@@ -74,7 +76,7 @@ describe('Integration: Real-world scenarios', () => {
       expect((validFrames[0] as LogFrame).type).toBe('LOG');
       expect((validFrames[0] as LogFrame).logData).toContain('TRACK');
       expect((validFrames[1] as ResourceFrame).type).toBe('RESOURCE');
-      expect((validFrames[1] as ResourceFrame).cpuUsage).toBe(45);
+      expect((validFrames[1] as ResourceFrame).length).toBe(9);
     });
   });
 
@@ -186,32 +188,43 @@ describe('Integration: Real-world scenarios', () => {
     });
   });
 
-  describe('Scenario 4: Resource frame with boundary values', () => {
-    it('should handle min/max resource values', () => {
-      const frameData = new Uint8Array(1 + 17);
+  describe('Scenario 4: Resource frame — parser extracts raw data', () => {
+    it('should extract resData from resource frame', () => {
+      const resData = new Uint8Array([
+        0,                    // CPU(u8) = 0
+        0, 0,                 // ROM(u16) = 0
+        0, 0,                 // RAM(u16) = 0
+        0xFF, 0x9C,           // Speed(i16) = -100
+        0x00, 0xC8,           // Servo(i16) = 200
+      ]);
+      const length = resData.length;
+
+      const payload = new Uint8Array(2 + length);
+      payload[0] = (length >> 8) & 0xFF;
+      payload[1] = length & 0xFF;
+      payload.set(resData, 2);
+
+      const dataCS = new Uint8Array(1 + 2 + length);
+      dataCS[0] = FRAME_TYPE.RESOURCE;
+      dataCS.set(payload, 1);
+      const checksum = calculateChecksum(dataCS);
+
+      const frameData = new Uint8Array(1 + payload.length + 1);
       frameData[0] = FRAME_TYPE.RESOURCE;
-      frameData[1] = 0; // cpuUsage: 0%
-      frameData[2] = 100; // ramUsage: 100%
-      frameData[3] = 0; frameData[4] = 0; // freeHeap: 0
-      frameData[5] = 0; frameData[6] = 0; // freeStack: 0
-      frameData[7] = 0x60; frameData[8] = 0x00; // ramTotal: 24576
-      frameData[9] = 0xFF; frameData[10] = 0xFF; // speed: -1
-      frameData[11] = 0xFF; frameData[12] = 0xFF; // servoAngle: -1
-      frameData.set(new Uint8Array(4), 13);
-      const checksum = calculateChecksum(frameData.slice(0, 17));
-      frameData[17] = checksum;
+      frameData.set(payload, 1);
+      frameData[frameData.length - 1] = checksum;
 
       const results = parser.parse(frameData);
       expect(results).toHaveLength(1);
       expect(results[0]).not.toBeInstanceOf(FrameParseError);
 
       const frame = results[0] as ResourceFrame;
-      expect(frame.cpuUsage).toBe(0);
-      expect(frame.ramUsage).toBe(100);
-      expect(frame.freeHeap).toBe(0);
-      expect(frame.freeStack).toBe(0);
-      expect(frame.speed).toBeLessThan(0);
-      expect(frame.servoAngle).toBeLessThan(0);
+      expect(frame.length).toBe(9);
+      expect(frame.resData.length).toBe(9);
+      // Parser 不关心语义，只验证原始字节正确传递
+      expect(frame.resData[0]).toBe(0);
+      expect(frame.resData[4]).toBe(0);
+      expect(frame.resData[6]).toBe(0x9C); // Speed lo byte
     });
   });
 

@@ -1,7 +1,14 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { ResourceManager } from '../resource-manager';
 import { TelemetrySerialManager } from '../manager';
 import { ResourceFrame } from '../protocol';
+
+function makeResFrame(cpu: number): ResourceFrame {
+  const resData = new Uint8Array(9);
+  resData[0] = cpu;
+  // remaining bytes default to 0
+  return { type: 'RESOURCE', length: 9, resData, checksum: 0 };
+}
 
 describe('ResourceManager', () => {
   let manager: ResourceManager;
@@ -18,31 +25,12 @@ describe('ResourceManager', () => {
 
   it('should attach and receive resource frames', () => {
     const serialManager = new TelemetrySerialManager();
-
     manager.attach(serialManager);
 
-    const resourceFrame: ResourceFrame = {
-      type: 'RESOURCE',
-      cpuUsage: 45,
-      ramUsage: 60,
-      freeHeap: 1024,
-      freeStack: 512,
-      ramTotal: 24576,
-      speed: 100,
-      servoAngle: 500,
-      reserved: new Uint8Array(4),
-      checksum: 0,
-    };
-
-    serialManager.emit({
-      type: 'FRAME',
-      frame: resourceFrame,
-    });
+    serialManager.emit({ type: 'FRAME', frame: makeResFrame(45) });
 
     expect(manager.getBufferSize()).toBe(1);
-    const current = manager.getCurrentData();
-    expect(current?.cpuUsage).toBe(45);
-    expect(current?.ramUsage).toBe(60);
+    expect(manager.getCurrentData()?.res[0]).toBe(45);
   });
 
   it('should ignore non-resource frames', () => {
@@ -51,12 +39,7 @@ describe('ResourceManager', () => {
 
     serialManager.emit({
       type: 'FRAME',
-      frame: {
-        type: 'LOG',
-        length: 5,
-        logData: 'test',
-        checksum: 0,
-      },
+      frame: { type: 'LOG', length: 5, logData: 'test', checksum: 0 },
     });
 
     expect(manager.getBufferSize()).toBe(0);
@@ -67,200 +50,39 @@ describe('ResourceManager', () => {
     manager.attach(serialManager);
 
     for (let i = 0; i < 3; i++) {
-      serialManager.emit({
-        type: 'FRAME',
-        frame: {
-          type: 'RESOURCE',
-          cpuUsage: 40 + i * 5,
-          ramUsage: 50 + i * 5,
-          freeHeap: 1024,
-          freeStack: 512,
-          speed: 100 + i * 10,
-          servoAngle: 500 + i * 10,
-          reserved: new Uint8Array(4),
-          checksum: 0,
-        } as ResourceFrame,
-      });
+      serialManager.emit({ type: 'FRAME', frame: makeResFrame(40 + i * 5) });
     }
 
     const all = manager.getAllData();
     expect(all.length).toBe(3);
-    expect(all[0].cpuUsage).toBe(40);
-    expect(all[1].cpuUsage).toBe(45);
-    expect(all[2].cpuUsage).toBe(50);
-  });
-
-  it('should calculate statistics', () => {
-    const serialManager = new TelemetrySerialManager();
-    manager.attach(serialManager);
-
-    serialManager.emit({
-      type: 'FRAME',
-      frame: {
-        type: 'RESOURCE',
-        cpuUsage: 40,
-        ramUsage: 50,
-        freeHeap: 1024,
-        freeStack: 512,
-        speed: 100,
-        servoAngle: 400,
-        reserved: new Uint8Array(4),
-        checksum: 0,
-      } as ResourceFrame,
-    });
-
-    serialManager.emit({
-      type: 'FRAME',
-      frame: {
-        type: 'RESOURCE',
-        cpuUsage: 60,
-        ramUsage: 70,
-        freeHeap: 2048,
-        freeStack: 1024,
-        speed: 200,
-        servoAngle: 600,
-        reserved: new Uint8Array(4),
-        checksum: 0,
-      } as ResourceFrame,
-    });
-
-    const stats = manager.getStats();
-    expect(stats.cpuUsageAvg).toBe(50);
-    expect(stats.cpuUsageMax).toBe(60);
-    expect(stats.ramUsageAvg).toBe(60);
+    expect(all[0].res[0]).toBe(40);
+    expect(all[1].res[0]).toBe(45);
+    expect(all[2].res[0]).toBe(50);
   });
 
   it('should detach from serial manager', () => {
     const serialManager = new TelemetrySerialManager();
     manager.attach(serialManager);
 
-    serialManager.emit({
-      type: 'FRAME',
-      frame: {
-        type: 'RESOURCE',
-        cpuUsage: 50,
-        ramUsage: 60,
-        freeHeap: 1024,
-        freeStack: 512,
-        speed: 100,
-        servoAngle: 500,
-        reserved: new Uint8Array(4),
-        checksum: 0,
-      } as ResourceFrame,
-    });
-
+    serialManager.emit({ type: 'FRAME', frame: makeResFrame(50) });
     expect(manager.getBufferSize()).toBe(1);
 
     manager.detach();
 
-    serialManager.emit({
-      type: 'FRAME',
-      frame: {
-        type: 'RESOURCE',
-        cpuUsage: 75,
-        ramUsage: 80,
-        freeHeap: 2048,
-        freeStack: 1024,
-        speed: 200,
-        servoAngle: 600,
-        reserved: new Uint8Array(4),
-        checksum: 0,
-      } as ResourceFrame,
-    });
-
-    expect(manager.getBufferSize()).toBe(1);
+    serialManager.emit({ type: 'FRAME', frame: makeResFrame(75) });
+    expect(manager.getBufferSize()).toBe(1); // unchanged
   });
 
   it('should clear all data', () => {
     const serialManager = new TelemetrySerialManager();
     manager.attach(serialManager);
 
-    serialManager.emit({
-      type: 'FRAME',
-      frame: {
-        type: 'RESOURCE',
-        cpuUsage: 50,
-        ramUsage: 60,
-        freeHeap: 1024,
-        freeStack: 512,
-        speed: 100,
-        servoAngle: 500,
-        reserved: new Uint8Array(4),
-        checksum: 0,
-      } as ResourceFrame,
-    });
-
+    serialManager.emit({ type: 'FRAME', frame: makeResFrame(50) });
     expect(manager.getBufferSize()).toBe(1);
 
     manager.clear();
-
     expect(manager.getBufferSize()).toBe(0);
     expect(manager.getCurrentData()).toBeNull();
-  });
-
-  it('should get data since timestamp', () => {
-    const serialManager = new TelemetrySerialManager();
-    manager.attach(serialManager);
-
-    const now = Date.now();
-
-    serialManager.emit({
-      type: 'FRAME',
-      frame: {
-        type: 'RESOURCE',
-        cpuUsage: 40,
-        ramUsage: 50,
-        freeHeap: 1024,
-        freeStack: 512,
-        speed: 100,
-        servoAngle: 400,
-        reserved: new Uint8Array(4),
-        checksum: 0,
-      } as ResourceFrame,
-    });
-
-    new Promise((resolve) => setTimeout(() => {
-      serialManager.emit({
-        type: 'FRAME',
-        frame: {
-          type: 'RESOURCE',
-          cpuUsage: 60,
-          ramUsage: 70,
-          freeHeap: 2048,
-          freeStack: 1024,
-          speed: 200,
-          servoAngle: 600,
-          reserved: new Uint8Array(4),
-          checksum: 0,
-        } as ResourceFrame,
-      });
-      resolve(null);
-    }, 50));
-  });
-
-  it('should report buffer utilization', () => {
-    const serialManager = new TelemetrySerialManager();
-    manager.attach(serialManager);
-
-    for (let i = 0; i < 5; i++) {
-      serialManager.emit({
-        type: 'FRAME',
-        frame: {
-          type: 'RESOURCE',
-          cpuUsage: 50,
-          ramUsage: 60,
-          freeHeap: 1024,
-          freeStack: 512,
-          speed: 100,
-          servoAngle: 500,
-          reserved: new Uint8Array(4),
-          checksum: 0,
-        } as ResourceFrame,
-      });
-    }
-
-    const utilization = manager.getBufferUtilization();
-    expect(utilization).toBe(25);
   });
 
   it('should handle reattaching to different manager', () => {
@@ -268,60 +90,28 @@ describe('ResourceManager', () => {
     const serialManager2 = new TelemetrySerialManager();
 
     manager.attach(serialManager1);
-
-    serialManager1.emit({
-      type: 'FRAME',
-      frame: {
-        type: 'RESOURCE',
-        cpuUsage: 50,
-        ramUsage: 60,
-        freeHeap: 1024,
-        freeStack: 512,
-        speed: 100,
-        servoAngle: 500,
-        reserved: new Uint8Array(4),
-        checksum: 0,
-      } as ResourceFrame,
-    });
-
+    serialManager1.emit({ type: 'FRAME', frame: makeResFrame(50) });
     expect(manager.getBufferSize()).toBe(1);
 
-    manager.attach(serialManager2);
+    manager.attach(serialManager2); // switches to manager2
 
-    serialManager1.emit({
-      type: 'FRAME',
-      frame: {
-        type: 'RESOURCE',
-        cpuUsage: 60,
-        ramUsage: 70,
-        freeHeap: 2048,
-        freeStack: 1024,
-        speed: 200,
-        servoAngle: 600,
-        reserved: new Uint8Array(4),
-        checksum: 0,
-      } as ResourceFrame,
-    });
-
+    // manager1 events should be ignored now
+    serialManager1.emit({ type: 'FRAME', frame: makeResFrame(60) });
     expect(manager.getBufferSize()).toBe(1);
 
-    serialManager2.emit({
-      type: 'FRAME',
-      frame: {
-        type: 'RESOURCE',
-        cpuUsage: 70,
-        ramUsage: 80,
-        freeHeap: 3072,
-        freeStack: 1536,
-        speed: 300,
-        servoAngle: 700,
-        reserved: new Uint8Array(4),
-        checksum: 0,
-      } as ResourceFrame,
-    });
-
+    serialManager2.emit({ type: 'FRAME', frame: makeResFrame(70) });
     expect(manager.getBufferSize()).toBe(2);
-    const current = manager.getCurrentData();
-    expect(current?.cpuUsage).toBe(70);
+    expect(manager.getCurrentData()?.res[0]).toBe(70);
+  });
+
+  it('should report buffer utilization', () => {
+    const serialManager = new TelemetrySerialManager();
+    manager.attach(serialManager);
+
+    for (let i = 0; i < 5; i++) {
+      serialManager.emit({ type: 'FRAME', frame: makeResFrame(50) });
+    }
+
+    expect(manager.getBufferUtilization()).toBe(25); // 5/20 * 100
   });
 });

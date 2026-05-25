@@ -9,7 +9,6 @@ import {
   calculateChecksum,
   verifyChecksum,
 } from './protocol';
-import { resourceSlots, SLOT_BYTES } from '../stores/resourceSlots';
 
 /**
  * 帧解析错误
@@ -118,7 +117,7 @@ export class FrameParser {
         this.currentFrameType = FRAME_TYPE.RESOURCE;
         this.state = FrameParseState.READ_RESOURCE_DATA;
         this.bufferPos = 0;
-        this.targetSize = FRAME_SIZE.RESOURCE - 1; // 不含帧头
+        this.targetSize = 0; // 先读 Length 字段动态确定大小
         return null;
 
       default:
@@ -147,7 +146,7 @@ export class FrameParser {
       return null;
     }
 
-    if (this.bufferPos < this.targetSize) {
+    if (this.targetSize === 0 || this.bufferPos < this.targetSize) {
       return null;
     }
 
@@ -262,16 +261,33 @@ export class FrameParser {
   }
 
   /**
-   * 读资源帧数据：按 resourceSlots 动态解析
+   * 读资源帧数据：Length(2) + Data(Length B) + Checksum(1)
+   * Parser 不关心 Data 内部划分，仅按 Length 读取原始字节。
    */
   private handleResourceData(byte: number): TelemetryFrame | null {
     this.buffer[this.bufferPos++] = byte;
 
-    if (this.bufferPos < this.targetSize) {
+    // 前2字节为 Length
+    if (this.bufferPos === 2) {
+      const length = (this.buffer[0] << 8) | this.buffer[1];
+      // targetSize = Length字段(2) + Data(length) + Checksum(1)
+      this.targetSize = length + 3;
+      if (this.buffer.length < this.targetSize) {
+        const grown = new Uint8Array(this.targetSize);
+        grown.set(this.buffer.slice(0, 2));
+        this.buffer = grown;
+      }
       return null;
     }
 
+    if (this.targetSize === 0 || this.bufferPos < this.targetSize) {
+      return null;
+    }
+
+    const length = (this.buffer[0] << 8) | this.buffer[1];
+    const resData = this.buffer.slice(2, 2 + length);
     const checksum = this.buffer[this.bufferPos - 1];
+
     const dataToCheck = new Uint8Array(1 + this.bufferPos - 1);
     dataToCheck[0] = FRAME_TYPE.RESOURCE;
     dataToCheck.set(this.buffer.slice(0, this.bufferPos - 1), 1);
@@ -279,24 +295,8 @@ export class FrameParser {
       throw new FrameParseError('RESOURCE_CHECKSUM_ERROR', 'Resource frame checksum mismatch');
     }
 
-    const view = new DataView(this.buffer.buffer, this.buffer.byteOffset);
-    const res: number[] = [];
-    let offset = 0;
-    for (const slot of resourceSlots) {
-      const bytes = SLOT_BYTES[slot.type];
-      if (offset + bytes > this.bufferPos - 1) break;
-      switch (slot.type) {
-        case 'u8':  res.push(this.buffer[offset]); break;
-        case 'u16': res.push(view.getUint16(offset, false)); break;
-        case 'i16': res.push(view.getInt16(offset, false)); break;
-        case 'u32': res.push(view.getUint32(offset, false)); break;
-        case 'i32': res.push(view.getInt32(offset, false)); break;
-      }
-      offset += bytes;
-    }
-
     this.resetState();
-    return { type: 'RESOURCE', res, checksum } as ResourceFrame;
+    return { type: 'RESOURCE', length, resData: new Uint8Array(resData), checksum } as ResourceFrame;
   }
 
   /**

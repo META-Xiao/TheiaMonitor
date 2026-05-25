@@ -26,41 +26,31 @@
       <div class="settings-content">
         <!-- Resource Frame -->
         <section v-show="activeSection === 'resources'" class="section-card">
-          <h2>Resource Frame</h2>
+          <div class="section-card-head">
+            <h2>Resource Frame</h2>
+            <span class="rf-status" :class="isDataValid ? 'ac' : 'wa'">
+              {{ isDataValid ? 'AC' : 'WA' }}
+            </span>
+          </div>
           <p class="section-desc">
-            Each slot maps to consecutive bytes in the 0xEE frame. Use <code>res[id]</code> in expressions.
+            Each cell maps to consecutive bytes in the 0xEE frame Data section.
+            Use <code>res[id]</code> in expressions. All cells must fill the Data space exactly.
           </p>
 
-          <!-- Byte map -->
+          <!-- Byte map: 0xEE + Length(2B) + Cells + Rsv(remainder) + CHK(1B) -->
           <div class="rf-bytemap">
             <div class="rf-bytemap-label">0xEE</div>
-            <!-- Fixed protocol slots: can be disabled (bytes stay, shown as hollow) -->
+            <div class="rf-bytemap-seg rf-bytemap-length">
+              <span class="rf-bytemap-name">Length</span>
+              <span class="rf-bytemap-sz">2B</span>
+            </div>
             <template v-for="slot in resourceSlots" :key="slot.id">
               <div
-                v-if="slot.id < DEFAULT_SLOT_COUNT"
-                class="rf-bytemap-seg"
-                :class="{ active: selectedSlot === slot.id, disabled: !slot.enabled }"
-                :style="{ flex: SLOT_BYTES[slot.type] }"
-                @click.stop="slot.enabled ? (selectedSlot = selectedSlot === slot.id ? -1 : slot.id) : (slot.enabled = true)"
-                :title="`res[${slot.id}] · ${slot.label}`"
-              >
-                <button
-                  v-if="slot.enabled"
-                  class="rf-seg-close"
-                  @click.stop="slot.enabled = false; if (selectedSlot === slot.id) selectedSlot = -1"
-                ><Icon icon="lucide:x" /></button>
-                <button v-else class="rf-seg-add" @click.stop="slot.enabled = true"><Icon icon="lucide:plus" /></button>
-                <span class="rf-bytemap-name">{{ slot.enabled ? slot.label : 'Rsv' }}</span>
-                <span class="rf-bytemap-sz">{{ slot.type }}</span>
-              </div>
-              <!-- Custom slots: × removes entirely, bytes return to Rsv -->
-              <div
-                v-else
                 class="rf-bytemap-seg"
                 :class="{ active: selectedSlot === slot.id }"
                 :style="{ flex: SLOT_BYTES[slot.type] }"
                 @click.stop="selectedSlot = selectedSlot === slot.id ? -1 : slot.id"
-                :title="`res[${slot.id}] · ${slot.label}`"
+                :title="`res[${getCellIndex(slot.id)}] · ${slot.label}`"
               >
                 <button
                   class="rf-seg-close"
@@ -70,7 +60,6 @@
                 <span class="rf-bytemap-sz">{{ slot.type }}</span>
               </div>
             </template>
-            <!-- Reserved remainder -->
             <div
               v-if="reservedBytes > 0"
               class="rf-bytemap-seg rf-bytemap-reserved"
@@ -89,11 +78,11 @@
               <template v-for="slot in resourceSlots" :key="slot.id">
                 <template v-if="slot.id === selectedSlot">
                   <div class="rf-dd-header">
-                    <code class="rf-dd-id">res[{{ slot.id }}]</code>
+                    <code class="rf-dd-id">cell[{{ String(getCellIndex(slot.id)).padStart(2, '0') }}]</code>
                     <span class="rf-dd-type-group">
                       <button v-for="t in SLOT_TYPES" :key="t" class="rf-size-btn" :class="{ active: slot.type === t }" @click="slot.type = t">{{ t }}</button>
                     </span>
-                    <button v-if="slot.id >= DEFAULT_SLOT_COUNT" class="rf-dd-remove" @click="removeSlot(slot.id); selectedSlot = -1"><Icon icon="lucide:trash-2" /></button>
+                    <button class="rf-dd-remove" @click="removeSlot(slot.id); selectedSlot = -1"><Icon icon="lucide:trash-2" /></button>
                   </div>
 
                   <div class="rf-dd-row">
@@ -155,8 +144,23 @@
             </div>
           </Transition>
 
+          <!-- Frame Data Length control -->
+          <div class="rf-length-row">
+            <span class="rf-length-label">Frame Data Length</span>
+            <button class="rf-length-btn" @click="adjustLength(-1)" :disabled="frameDataLength <= 1">-</button>
+            <input
+              class="rf-length-input"
+              type="number"
+              :value="frameDataLength"
+              @change="frameDataLength = Math.max(1, Math.min(256, Number(($event.target as HTMLInputElement).value) || 1))"
+              min="1" max="256"
+            />
+            <button class="rf-length-btn" @click="adjustLength(1)" :disabled="frameDataLength >= 256">+</button>
+            <span class="rf-length-hint">B</span>
+          </div>
+
           <div class="rf-footer">
-            <span class="rf-footer-info">{{ totalBytes }}B / 17B used</span>
+            <span class="rf-footer-info">Data: {{ totalBytes }}B / {{ frameDataLength }}B</span>
             <button class="rf-reset-btn" style="margin-right:auto;margin-left:8px" @click="showTips = !showTips">
               <Icon icon="lucide:book-open" /> Tips
             </button>
@@ -318,7 +322,7 @@
 import { reactive, ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { Icon } from "@iconify/vue";
 import AppSelect from "../components/AppSelect.vue";
-import { resourceSlots, SLOT_BYTES, FRAME_BODY_BYTES, resetToDefault, type SlotType } from "../stores/resourceSlots";
+import { resourceSlots, SLOT_BYTES, frameDataLength, reindexSlots, resetToDefault, type SlotType } from "../stores/resourceSlots";
 import { envVars } from "../stores/envVars";
 
 const sections = [
@@ -445,26 +449,37 @@ const chartModes: { id: ChartModeId; label: string; icon: string }[] = [
   { id: "delta", label: "Smooth", icon: "lucide:activity" },
 ];
 
-const SLOT_TYPES: SlotType[] = ["u8", "u16", "i16", "u32", "i32"];
-const DEFAULT_SLOT_COUNT = 5; // 固定协议字段数量
+const SLOT_TYPES: SlotType[] = ["u8", "u16", "i16", "u32", "i32", "u64", "i64"];
 
 const totalBytes = computed(() => resourceSlots.reduce((s, sl) => s + SLOT_BYTES[sl.type], 0));
-const reservedBytes = computed(() => Math.max(0, FRAME_BODY_BYTES - 1 - totalBytes.value)); // -1 for checksum already excluded
+const reservedBytes = computed(() => Math.max(0, frameDataLength.value - totalBytes.value));
+const isDataValid = computed(() => totalBytes.value === frameDataLength.value);
 
 const selectedSlot = ref(-1);
 const showTips = ref(false);
 
+function getCellIndex(id: number): number {
+  return resourceSlots.findIndex(s => s.id === id);
+}
+
 const addSlot = () => {
   const rem = reservedBytes.value;
   if (rem <= 0) return;
-  const type: SlotType = rem >= 2 ? "u16" : "u8";
-  const id = resourceSlots.length;
-  resourceSlots.push({ id, label: `Custom${id}`, type, expr: `res[${id}]`, unit: "", chart: "line", enabled: true });
+  // pick smallest type that fits in remaining space
+  const type: SlotType = rem >= 8 ? "u64" : rem >= 4 ? "u32" : rem >= 2 ? "u16" : "u8";
+  const id = resourceSlots.length > 0 ? Math.max(...resourceSlots.map(s => s.id)) + 1 : 0;
+  resourceSlots.push({ id, label: `Cell${id}`, type, expr: `res[${id}]`, unit: "", chart: "line", enabled: true });
 };
 
 const removeSlot = (id: number) => {
   const idx = resourceSlots.findIndex(s => s.id === id);
-  if (idx >= DEFAULT_SLOT_COUNT) resourceSlots.splice(idx, 1);
+  if (idx < 0) return;
+  resourceSlots.splice(idx, 1);
+  reindexSlots();
+};
+
+const adjustLength = (delta: number) => {
+  frameDataLength.value = Math.max(1, Math.min(256, frameDataLength.value + delta));
 };
 
 import { useChartPath } from '../composables/useChartPath';
@@ -534,7 +549,7 @@ const channels = reactive([
   {
     id: "resource",
     name: "Resource Monitor",
-    desc: "0xEE · 18 B/frame · 5 FPS",
+    desc: "0xEE · variable length · 1 FPS",
     enabled: true,
   },
 ]);
@@ -644,10 +659,36 @@ h1 {
 }
 
 .section-card h2 {
-  margin: 0 0 22px;
+  margin: 0;
   font-size: 20px;
   font-weight: 900;
   letter-spacing: -0.03em;
+}
+
+.section-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+
+.rf-status {
+  font-size: 12px;
+  font-weight: 900;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  padding: 3px 10px;
+  border-radius: 8px;
+  letter-spacing: 0.06em;
+}
+
+.rf-status.ac {
+  background: rgba(32, 184, 166, 0.15);
+  color: #0e8a7e;
+}
+
+.rf-status.wa {
+  background: rgba(239, 68, 68, 0.15);
+  color: #dc2626;
 }
 
 .section-desc {
@@ -739,6 +780,15 @@ h1 {
   cursor: default;
   opacity: 0.4;
   flex: 1;
+}
+
+.rf-bytemap-seg.rf-bytemap-length {
+  cursor: default;
+  opacity: 0.55;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px dashed rgba(99, 102, 241, 0.3);
+  flex: 2;
+  min-width: 28px;
 }
 
 .rf-seg-close,
@@ -1056,6 +1106,71 @@ h1 {
   transition: background 120ms;
 }
 .rf-hint-chip:hover { background: rgba(32,184,166,0.2); }
+
+/* Frame Data Length control */
+.rf-length-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.rf-length-label {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-dim);
+  font-family: "JetBrains Mono", Consolas, monospace;
+}
+
+.rf-length-btn {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  background: var(--card-bg);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 900;
+  cursor: pointer;
+  transition: background 120ms;
+}
+
+.rf-length-btn:hover:not(:disabled) {
+  background: var(--surface);
+  border-color: #20b8a6;
+}
+
+.rf-length-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.rf-length-input {
+  width: 52px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 900;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  color: var(--text);
+  background: var(--card-bg);
+  border: 1.5px solid var(--card-border);
+  border-radius: 6px;
+  padding: 4px 6px;
+  outline: none;
+  transition: border-color 120ms;
+}
+
+.rf-length-input:focus {
+  border-color: #20b8a6;
+}
+
+.rf-length-hint {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-dim);
+}
 
 /* Footer */
 .rf-footer {

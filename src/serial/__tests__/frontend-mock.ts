@@ -44,12 +44,19 @@ export function startFrontendMock(serialManager: TelemetrySerialManager): () => 
     const speed    = Math.floor(90  + Math.random() * 390);
     const servo    = Math.floor(80  + Math.random() * 820);
 
-    // new protocol: res[0]=CPU, res[1]=ROM_free, res[2]=RAM_free, res[3]=Speed, res[4]=Servo
+    // resData = CPU(u8) + ROM(u16) + RAM(u16) + Speed(i16) + Servo(i16) = 9B
+    const resData = new Uint8Array(9);
+    resData[0] = cpu;
+    resData[1] = (romFree >> 8) & 0xFF; resData[2] = romFree & 0xFF;
+    resData[3] = (ramFree >> 8) & 0xFF; resData[4] = ramFree & 0xFF;
+    resData[5] = (speed >> 8) & 0xFF;   resData[6] = speed & 0xFF;
+    resData[7] = (servo >> 8) & 0xFF;   resData[8] = servo & 0xFF;
     serialManager.emit({
       type: 'FRAME',
       frame: {
         type: 'RESOURCE',
-        res: [cpu, romFree, ramFree, speed, servo],
+        length: 9,
+        resData,
         checksum: 0,
       },
     });
@@ -57,7 +64,7 @@ export function startFrontendMock(serialManager: TelemetrySerialManager): () => 
     // LOG 帧 (0xDD)
     const tpl = logMessages[Math.floor(Math.random() * logMessages.length)]()
       .replace('{cpu}', String(cpu))
-      .replace('{ram}', String(ram))
+      .replace('{ram}', String(ramFree))
       .replace('{speed}', String(speed))
       .replace('{servo}', (servo / 10).toFixed(1));
     serialManager.emit({

@@ -10,7 +10,6 @@ export const FRAME_TYPE = {
 export const FRAME_SIZE = {
   IMAGE_MAX: 65033, // 0xCC: 1+2(Length)+2(Frame)+1(W)+1(H)+255*255(data)+1(CS) — 最大分辨率 255×255
   LOG_MAX: 260,     // 0xDD: 1 + 2 + 256 + 1 = 260
-  RESOURCE: 15,     // 0xEE: 1(ID)+1(CPU)+2(ROM_free)+2(RAM_free)+2(Speed)+2(Servo)+4(Reserved)+1(Checksum)
 } as const;
 
 export const BAUDRATE = 115200;
@@ -41,13 +40,15 @@ export interface LogFrame {
 }
 
 /**
- * 资源帧 (0xEE) — 动态槽解析
- * res[i] 对应第 i 个槽的原始整数值，由 resourceSlots 配置决定字节数和符号
+ * 资源帧 (0xEE)
+ * 帧结构: ID(1) + Length(2) + Data(Length B) + Checksum(1)
+ * Data 为不透明数据块，由 resourceSlots 配置决定内部 Cell 划分
  */
 export interface ResourceFrame {
   type: 'RESOURCE';
-  res: number[];    // 按槽顺序的原始值数组
-  checksum: number;
+  length: number;         // 2字节 uint16 大端，Data 字节数
+  resData: Uint8Array;    // Length 字节原始数据
+  checksum: number;       // 1字节
 }
 
 export type TelemetryFrame = ImageFrame | LogFrame | ResourceFrame;

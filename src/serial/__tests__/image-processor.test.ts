@@ -99,9 +99,8 @@ describe('ImageFrameProcessor', () => {
 
     const frame1: ImageFrame = {
       type: 'IMAGE',
+      length: 4 + TOTAL_PIXELS,
       frameId: 1,
-      fpsCam: 100,
-      fpsOut: 25,
       width: WIDTH,
       height: HEIGHT,
       imageData,
@@ -113,9 +112,8 @@ describe('ImageFrameProcessor', () => {
 
     const frame2: ImageFrame = {
       type: 'IMAGE',
+      length: 4 + TOTAL_PIXELS,
       frameId: 2,
-      fpsCam: 100,
-      fpsOut: 25,
       width: WIDTH,
       height: HEIGHT,
       imageData,
