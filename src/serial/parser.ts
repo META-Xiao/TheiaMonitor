@@ -308,6 +308,12 @@ export class FrameParser {
   /**
    * 重置状态机
    */
+  /** 公开重置方法，清空内部缓冲和状态机 */
+  reset(): void {
+    this.buffer = new Uint8Array(0);
+    this.resetState();
+  }
+
   private resetState(): void {
     this.state = FrameParseState.WAIT_HEADER;
     this.bufferPos = 0;

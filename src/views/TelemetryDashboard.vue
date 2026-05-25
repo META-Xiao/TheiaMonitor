@@ -1,5 +1,5 @@
 <template>
-  <div class="page" @click="avatarOpen = false; mobileAvatarOpen = false">
+  <div class="page" @click="avatarOpen = false; mobileAvatarOpen = false; replayOpen = false">
     <nav class="nav">
       <b class="logo" @click="cliOpen = !cliOpen" title="Toggle CLI (Ctrl+J)"><img src="/img/Simple_logo.svg" class="logo-img" alt="logo" /></b>
       <div class="tabs">
@@ -11,6 +11,58 @@
         >
           {{ tab }}
         </button>
+      </div>
+      <div class="replay-wrap">
+        <button class="replay-btn" :class="{ on: replayState !== 'idle' }" @click.stop="replayOpen = !replayOpen" title="Replay .bin files">
+          <Icon icon="lucide:play-circle" /><span>Replay</span>
+        </button>
+        <Transition name="popup">
+          <div v-if="replayOpen" class="avatar-popup replay-popup" @click.stop>
+            <div class="popup-status" :class="replayState === 'playing' ? 'online' : 'offline'">
+              {{ replayState === 'idle' ? 'Select File' : replayState === 'loading' ? 'Loading...' : replayState === 'ready' ? 'Ready' : replayState === 'playing' ? 'Playing' : replayState === 'paused' ? 'Paused' : 'Finished' }}
+            </div>
+            <div v-if="replayState === 'loading'" class="connect-detail">
+              <span>Parsing frames...</span>
+            </div>
+            <div v-else-if="replayState !== 'idle'" class="connect-detail">
+              <span>{{ replayCtrl.fileName }}</span>
+              <span>{{ replayCurrent }} / {{ replayTotal }} frames</span>
+            </div>
+            <div class="replay-actions">
+              <template v-if="replayState === 'idle'">
+                <button class="popup-action" @click="replayChooseFile">Choose File</button>
+              </template>
+              <template v-else-if="replayState === 'loading'">
+                <button class="popup-action" disabled>Loading...</button>
+              </template>
+              <template v-else-if="replayState === 'ready'">
+                <button class="popup-action" @click="replayChooseFile">Change File</button>
+                <button class="popup-action" @click="replayRun">Run</button>
+              </template>
+              <template v-else-if="replayState === 'playing'">
+                <div class="replay-transport">
+                  <button class="popup-action replay-step" @click="replayStepBack" title="Step Back (-1)"><Icon icon="lucide:skip-back" /></button>
+                  <button class="popup-action replay-step" @click="replayPause" title="Pause"><Icon icon="lucide:pause" /></button>
+                  <button class="popup-action replay-step" @click="replayStepFwd" title="Step Forward (+1)"><Icon icon="lucide:skip-forward" /></button>
+                </div>
+              </template>
+              <template v-else-if="replayState === 'paused'">
+                <div class="replay-transport">
+                  <button class="popup-action replay-step" @click="replayStepBack" title="Step Back (-1)"><Icon icon="lucide:skip-back" /></button>
+                  <button class="popup-action replay-step" @click="replayRun" title="Resume"><Icon icon="lucide:play" /></button>
+                  <button class="popup-action replay-step" @click="replayStepFwd" title="Step Forward (+1)"><Icon icon="lucide:skip-forward" /></button>
+                </div>
+              </template>
+              <template v-else-if="replayState === 'finished'">
+                <div class="replay-transport">
+                  <button class="popup-action replay-step" @click="replayStepBack" title="Step Back (-1)"><Icon icon="lucide:skip-back" /></button>
+                  <button class="popup-action replay-step" @click="replayRestart" title="Replay from start"><Icon icon="lucide:rotate-cw" /></button>
+                  <button class="popup-action replay-step danger" @click="replayExit" title="Exit replay"><Icon icon="lucide:x" /></button>
+                </div>
+              </template>
+            </div>
+          </div>
+        </Transition>
       </div>
       <div
         class="avatar"
@@ -224,6 +276,66 @@ import { useCanvasAnimation } from "../composables/useCanvasAnimation";
 import { useTelemetry } from "../composables/useTelemetry";
 import { conn } from "../stores/connection";
 import { resourceSlots } from "../stores/resourceSlots";
+import { ReplayController } from "../serial/replay";
+import type { ReplayState } from "../serial/replay";
+import { serialManager as _sm } from "../composables/useTelemetry";
+
+const replayCtrl = new ReplayController(_sm);
+const replayState = ref<ReplayState>('idle');
+const replayOpen = ref(false);
+const replayCurrent = ref(0);
+const replayTotal = ref(0);
+
+replayCtrl.setEvents({
+  onStateChange(s) {
+    replayState.value = s;
+    if (s === 'idle') replayOpen.value = false;
+  },
+  onProgress(cur, total) {
+    replayCurrent.value = cur;
+    replayTotal.value = total;
+  },
+});
+
+let _replayFileInput: HTMLInputElement | null = null;
+function replayChooseFile() {
+  if (!_replayFileInput) {
+    _replayFileInput = document.createElement('input');
+    _replayFileInput.type = 'file';
+    _replayFileInput.accept = '.bin';
+    _replayFileInput.addEventListener('change', () => {
+      const f = _replayFileInput?.files?.[0];
+      if (f) replayCtrl.loadFile(f);
+    });
+  }
+  _replayFileInput.click();
+}
+
+function replayRun() {
+  if (replayState.value === 'ready' || replayState.value === 'paused') {
+    replayCtrl.play();
+  }
+}
+
+function replayPause() {
+  replayCtrl.pause();
+}
+
+function replayStepFwd() {
+  replayCtrl.stepForward();
+}
+
+function replayStepBack() {
+  replayCtrl.stepBackward();
+}
+
+function replayRestart() {
+  replayCtrl.replay();
+}
+
+function replayExit() {
+  replayCtrl.exit();
+}
 
 const {
   mcuLogs, imageFps, imageManager, serialManager,
@@ -501,6 +613,60 @@ onUnmounted(() => {
 .avatar.offline { box-shadow: 0 0 0 2.5px #ef4444, 0 12px 34px rgba(33,58,75,.12); }
 [data-theme="dark"] .avatar.online  { box-shadow: 0 0 0 2.5px #4ade80, 0 12px 34px rgba(0,0,0,.25); }
 [data-theme="dark"] .avatar.offline { box-shadow: 0 0 0 2.5px #f87171, 0 12px 34px rgba(0,0,0,.25); }
+
+/* ── Replay 按钮 ── */
+.replay-wrap {
+  position: relative;
+}
+.replay-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--nav-tab-bg);
+  color: var(--text-muted);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  backdrop-filter: blur(18px);
+  transition: background 200ms, color 200ms, box-shadow 200ms;
+}
+.replay-btn:hover { color: var(--text); background: var(--nav-tab-active); }
+.replay-btn.on {
+  color: #22c55e;
+  box-shadow: 0 0 0 2px #22c55e;
+}
+[data-theme="dark"] .replay-btn.on {
+  color: #4ade80;
+  box-shadow: 0 0 0 2px #4ade80;
+}
+.replay-btn svg { width: 16px; height: 16px; }
+
+.replay-popup {
+  right: 0;
+  min-width: 220px;
+}
+.replay-transport {
+  display: flex;
+  gap: 6px;
+  padding: 6px 0 2px;
+}
+.replay-step {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 8px 0 !important;
+}
+.replay-step.danger {
+  background: rgba(239,68,68,0.12) !important;
+  color: #ef4444 !important;
+}
+.replay-step.danger:hover {
+  background: #ef4444 !important;
+  color: #fff !important;
+}
 
 /* ── 底部导航（移动端） ── */
 .bottom-nav {

@@ -10,7 +10,6 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:ui": "vitest --ui",
-    "simulate": "npx tsx src/serial/simulate.ts",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "cap:sync": "npm run build && npx cap sync android",
