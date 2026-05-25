@@ -26,7 +26,15 @@
             <!-- file row -->
             <div class="replay-file-row" :class="replayState === 'idle' ? 'dim' : 'active'">
               <Icon icon="lucide:file-video" class="replay-file-icon" />
-              <span>{{ replayState === 'idle' ? 'No file' : replayCtrl.fileName }}</span>
+              <span class="replay-file-name">{{ replayState === 'idle' ? 'No file' : replayCtrl.fileName }}</span>
+              <input
+                class="replay-speed"
+                type="number"
+                :value="replayCtrl.speed.toFixed(2)"
+                @input="replayCtrl.speed = parseFloat(($event.target as HTMLInputElement).value) || 1.0"
+                min="0.01" max="10.0" step="0.01"
+                title="Playback speed"
+              />
             </div>
             <!-- progress -->
             <div v-if="replayState !== 'idle' && replayState !== 'loading'" class="replay-progress">
@@ -658,7 +666,22 @@ onUnmounted(() => {
 .replay-file-row.dim    { color: var(--text-muted); }
 .replay-file-row.active { color: #22c55e; }
 [data-theme="dark"] .replay-file-row.active { color: #4ade80; }
+.replay-file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .replay-file-icon { width: 18px; height: 18px; flex-shrink: 0; }
+.replay-speed {
+  width: 56px;
+  flex-shrink: 0;
+  padding: 2px 4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+  font-family: "JetBrains Mono", monospace;
+  text-align: right;
+}
+.replay-speed:focus { outline: none; border-color: #22c55e; }
+[data-theme="dark"] .replay-speed:focus { border-color: #4ade80; }
 
 .replay-progress {
   font-size: 12px;

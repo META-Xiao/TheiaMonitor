@@ -24,6 +24,7 @@ export class ReplayController {
   private _fileName = '';
   private _currentIdx = 0;
   private _playTimer: ReturnType<typeof setTimeout> | null = null;
+  private _speed = 1.0;
 
   private events: ReplayEvents = {};
 
@@ -35,6 +36,8 @@ export class ReplayController {
   get fileName(): string { return this._fileName; }
   get currentIndex(): number { return this._currentIdx; }
   get totalFrames(): number { return this.frames.length; }
+  get speed(): number { return this._speed; }
+  set speed(v: number) { this._speed = Math.max(0.01, Math.min(10.0, v)); }
 
   setEvents(e: ReplayEvents) { this.events = e; }
 
@@ -176,7 +179,7 @@ export class ReplayController {
     if (this._currentIdx >= this.frames.length) {
       this._onFinished();
     } else {
-      const delay = this.frames[this._currentIdx]?.type === 'IMAGE' ? 50 : 5;
+      const delay = (this.frames[this._currentIdx]?.type === 'IMAGE' ? 50 : 5) / this._speed;
       this._playTimer = setTimeout(() => this._tick(), delay);
     }
   }
