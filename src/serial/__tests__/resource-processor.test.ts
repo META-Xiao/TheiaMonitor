@@ -13,12 +13,12 @@ describe('ResourceFrameProcessor', () => {
     processor = new ResourceFrameProcessor();
   });
 
-  // 默认 preset: CPU(u8) + ROM(u16) + RAM(u16) + Speed(i16) + Servo(i16) = 9B
+  // 默认 preset: CPU(u8) + RAM(u16) + ROM(u16) + Speed(i16) + Servo(i16) = 9B
   it('should parse resData into res[] according to default slots', () => {
     const resData = new Uint8Array([
       50,           // CPU = 50 (u8)
-      0x12, 0x34,   // ROM = 0x1234 = 4660 (u16)
       0x56, 0x78,   // RAM = 0x5678 = 22136 (u16)
+      0x12, 0x34,   // ROM = 0x1234 = 4660 (u16)
       0x00, 0x64,   // Speed = 100 (i16)
       0x00, 0xC8,   // Servo = 200 (i16)
     ]);
@@ -27,8 +27,8 @@ describe('ResourceFrameProcessor', () => {
 
     expect(processed.res).toHaveLength(5);
     expect(processed.res[0]).toBe(50);    // CPU
-    expect(processed.res[1]).toBe(0x1234); // ROM
-    expect(processed.res[2]).toBe(0x5678); // RAM
+    expect(processed.res[1]).toBe(0x5678); // RAM
+    expect(processed.res[2]).toBe(0x1234); // ROM
     expect(processed.res[3]).toBe(100);   // Speed
     expect(processed.res[4]).toBe(200);   // Servo
     expect(processed.values).toHaveLength(5);
@@ -49,16 +49,16 @@ describe('ResourceFrameProcessor', () => {
   it('should handle edge values 0 and max', () => {
     const resData = new Uint8Array([
       0,            // CPU = 0
-      0, 0,         // ROM = 0
       0xFF, 0xFF,   // RAM = 65535
+      0, 0,         // ROM = 0
       0x7F, 0xFF,   // Speed = 32767
       0x80, 0x00,   // Servo = -32768
     ]);
 
     const processed = processor.process(makeFrame(resData));
     expect(processed.res[0]).toBe(0);
-    expect(processed.res[1]).toBe(0);
-    expect(processed.res[2]).toBe(65535);
+    expect(processed.res[1]).toBe(65535);
+    expect(processed.res[2]).toBe(0);
     expect(processed.res[3]).toBe(32767);
     expect(processed.res[4]).toBe(-32768);
   });

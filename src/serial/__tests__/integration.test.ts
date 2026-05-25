@@ -45,8 +45,8 @@ describe('Integration: Real-world scenarios', () => {
       const resPayload = new Uint8Array(2 + 9);
       resPayload[0] = 0; resPayload[1] = 9;  // Length = 9
       resPayload[2] = 45;                     // CPU(u8)
-      resPayload[3] = 0x1F; resPayload[4] = 0x40; // ROM(u16)
-      resPayload[5] = 0x1D; resPayload[6] = 0xA0; // RAM(u16)
+      resPayload[3] = 0x1D; resPayload[4] = 0xA0; // RAM(u16)
+      resPayload[5] = 0x1F; resPayload[6] = 0x40; // ROM(u16)
       resPayload[7] = 0x01; resPayload[8] = 0xF4; // Speed(i16)
       resPayload[9] = 0x00; resPayload[10] = 0xB4; // Servo(i16)
       const resCS = new Uint8Array(1 + resPayload.length);
@@ -192,8 +192,8 @@ describe('Integration: Real-world scenarios', () => {
     it('should extract resData from resource frame', () => {
       const resData = new Uint8Array([
         0,                    // CPU(u8) = 0
-        0, 0,                 // ROM(u16) = 0
         0, 0,                 // RAM(u16) = 0
+        0, 0,                 // ROM(u16) = 0
         0xFF, 0x9C,           // Speed(i16) = -100
         0x00, 0xC8,           // Servo(i16) = 200
       ]);

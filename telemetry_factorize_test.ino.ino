@@ -121,8 +121,8 @@ static void send_resource(uint8_t cpu_pct, int16_t speed, int16_t servo) {
     buf[1]  = 0;                        // Length hi (9)
     buf[2]  = 9;                        // Length lo
     buf[3]  = cpu_pct;                  // CPU u8
-    buf[4]  = (uint8_t)(rom_free >> 8);   buf[5]  = (uint8_t)(rom_free & 0xFF);
-    buf[6]  = (uint8_t)(ram_free >> 8);   buf[7]  = (uint8_t)(ram_free & 0xFF);
+    buf[4]  = (uint8_t)(ram_free >> 8);   buf[5]  = (uint8_t)(ram_free & 0xFF);
+    buf[6]  = (uint8_t)(rom_free >> 8);   buf[7]  = (uint8_t)(rom_free & 0xFF);
     buf[8]  = (uint8_t)(speed >> 8);      buf[9]  = (uint8_t)(speed & 0xFF);
     buf[10] = (uint8_t)(servo >> 8);      buf[11] = (uint8_t)(servo & 0xFF);
     uint8_t cs = 0;

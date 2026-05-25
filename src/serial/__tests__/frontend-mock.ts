@@ -44,11 +44,11 @@ export function startFrontendMock(serialManager: TelemetrySerialManager): () => 
     const speed    = Math.floor(90  + Math.random() * 390);
     const servo    = Math.floor(80  + Math.random() * 820);
 
-    // resData = CPU(u8) + ROM(u16) + RAM(u16) + Speed(i16) + Servo(i16) = 9B
+    // resData = CPU(u8) + RAM(u16) + ROM(u16) + Speed(i16) + Servo(i16) = 9B
     const resData = new Uint8Array(9);
     resData[0] = cpu;
-    resData[1] = (romFree >> 8) & 0xFF; resData[2] = romFree & 0xFF;
-    resData[3] = (ramFree >> 8) & 0xFF; resData[4] = ramFree & 0xFF;
+    resData[1] = (ramFree >> 8) & 0xFF; resData[2] = ramFree & 0xFF;
+    resData[3] = (romFree >> 8) & 0xFF; resData[4] = romFree & 0xFF;
     resData[5] = (speed >> 8) & 0xFF;   resData[6] = speed & 0xFF;
     resData[7] = (servo >> 8) & 0xFF;   resData[8] = servo & 0xFF;
     serialManager.emit({

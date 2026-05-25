@@ -164,12 +164,12 @@ describe('FrameParser', () => {
   });
 
   describe('Resource Frame (0xEE)', () => {
-    // 默认预设: CPU(u8)+ROM(u16)+RAM(u16)+Speed(i16)+Servo(i16) = 9B
+    // 默认预设: CPU(u8)+RAM(u16)+ROM(u16)+Speed(i16)+Servo(i16) = 9B
     it('should parse resource frame — parser only extracts raw resData', () => {
       const resData = new Uint8Array([
         50,           // CPU = 50% (u8)
-        0x12, 0x34,   // ROM = 0x1234 (u16)
         0x56, 0x78,   // RAM = 0x5678 (u16)
+        0x12, 0x34,   // ROM = 0x1234 (u16)
         0x00, 0x64,   // Speed = 100 (i16)
         0x00, 0xC8,   // Servo = 200 (i16)
       ]);
@@ -198,7 +198,7 @@ describe('FrameParser', () => {
       expect(resourceFrame.length).toBe(length);
       expect(resourceFrame.resData.length).toBe(length);
       expect(resourceFrame.resData[0]).toBe(50);  // CPU
-      expect(resourceFrame.resData[4]).toBe(0x78); // RAM lo byte
+      expect(resourceFrame.resData[4]).toBe(0x34); // ROM lo byte
     });
 
     it('should reject invalid checksum on resource frame', () => {

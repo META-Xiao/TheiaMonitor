@@ -3,14 +3,23 @@ import { reactive, watch } from 'vue';
 export interface EnvVar { key: string; value: number; desc: string; }
 
 const STORAGE_KEY = 'tv_env_vars';
+const STORAGE_VERSION = 2;
+const VERSION_KEY = 'tv_env_vars_ver';
 
 const DEFAULT: EnvVar[] = [
-  { key: 'ROM_TOTAL', value: 32768, desc: 'ATmega32U4 Flash bytes' },
-  { key: 'RAM_TOTAL', value: 2560,  desc: 'ATmega32U4 SRAM bytes' },
+  { key: 'ROM_TOTAL', value: 131072, desc: 'STC32G144K Flash bytes (128KB)' },
+  { key: 'RAM_TOTAL', value: 24576,  desc: 'STC32G144K SRAM bytes (24KB)' },
 ];
 
 function load(): EnvVar[] {
-  try { const r = localStorage.getItem(STORAGE_KEY); if (r) return JSON.parse(r); } catch {}
+  try {
+    if (localStorage.getItem(VERSION_KEY) !== String(STORAGE_VERSION)) {
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.setItem(VERSION_KEY, String(STORAGE_VERSION));
+    }
+    const r = localStorage.getItem(STORAGE_KEY);
+    if (r) return JSON.parse(r);
+  } catch {}
   return DEFAULT.map(v => ({ ...v }));
 }
 

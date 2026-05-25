@@ -19,17 +19,17 @@ export const SLOT_BYTES: Record<SlotType, number> = {
 
 const DEFAULT_SLOTS: ResourceSlot[] = [
   { id: 0, label: 'CPU',      type: 'u8',  expr: 'res[0]',                              unit: '%',   chart: 'line',  enabled: true  },
-  { id: 1, label: 'ROM', type: 'u16', expr: '(ROM_TOTAL-res[1])/ROM_TOTAL*100',    unit: '%',   chart: 'line',  enabled: true  },
-  { id: 2, label: 'RAM', type: 'u16', expr: '(RAM_TOTAL-res[2])/RAM_TOTAL*100',    unit: '%',   chart: 'line',  enabled: true  },
+  { id: 1, label: 'RAM', type: 'u16', expr: '(RAM_TOTAL-res[1])/RAM_TOTAL*100',    unit: '%',   chart: 'line',  enabled: true  },
+  { id: 2, label: 'ROM', type: 'u16', expr: '(ROM_TOTAL-res[2])/ROM_TOTAL*100',    unit: '%',   chart: 'line',  enabled: true  },
   { id: 3, label: 'Speed',    type: 'i16', expr: 'res[3]/1000.0',                       unit: 'm/s', chart: 'line',  enabled: true  },
   { id: 4, label: 'Servo',    type: 'i16', expr: 'res[4]/10.0',                         unit: '°',   chart: 'delta', enabled: true  },
 ];
 
-const DEFAULT_FRAME_DATA_LENGTH = 9; // CPU(u8) + ROM(u16) + RAM(u16) + Speed(i16) + Servo(i16)
+const DEFAULT_FRAME_DATA_LENGTH = 9; // CPU(u8) + RAM(u16) + ROM(u16) + Speed(i16) + Servo(i16)
 
 // bump version to force localStorage reset
 const STORAGE_KEY = 'tv_resource_slots';
-const STORAGE_VERSION = 7;
+const STORAGE_VERSION = 9;
 const VERSION_KEY = 'tv_resource_slots_ver';
 const LENGTH_KEY = 'tv_resource_frame_data_length';
 
