@@ -28,12 +28,12 @@
               <Icon icon="lucide:file-video" class="replay-file-icon" />
               <span class="replay-file-name">{{ replayState === 'idle' ? 'No file' : replayCtrl.fileName }}</span>
               <input
-                class="replay-speed"
+                class="popup-input replay-speed"
                 type="number"
                 :value="replayCtrl.speed.toFixed(2)"
                 @input="replayCtrl.speed = parseFloat(($event.target as HTMLInputElement).value) || 1.0"
                 min="0.01" max="10.0" step="0.01"
-                title="Playback speed"
+                title="Speed"
               />
             </div>
             <!-- progress -->
@@ -671,17 +671,12 @@ onUnmounted(() => {
 .replay-speed {
   width: 56px;
   flex-shrink: 0;
-  padding: 2px 4px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--bg);
-  color: var(--text);
-  font-size: 12px;
   font-family: "JetBrains Mono", monospace;
   text-align: right;
 }
-.replay-speed:focus { outline: none; border-color: #22c55e; }
-[data-theme="dark"] .replay-speed:focus { border-color: #4ade80; }
+.replay-speed::-webkit-outer-spin-button,
+.replay-speed::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.replay-speed[type=number] { -moz-appearance: textfield; }
 
 .replay-progress {
   font-size: 12px;
