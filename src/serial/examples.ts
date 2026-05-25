@@ -98,8 +98,8 @@ function handleTelemetryFrame(
  * 示例 3: 处理图传帧
  */
 function handleImageFrame(frame: ImageFrame) {
-  console.log(`[图传] Frame #${frame.frameId}, FPS_cam: ${frame.fpsCam}, FPS_out: ${frame.fpsOut}`);
-  console.log(`  图像大小: ${frame.imageData.length} 字节 (188×120 灰度)`);
+  console.log(`[图传] Frame #${frame.frameId}, length=${frame.length}`);
+  console.log(`  图像大小: ${frame.imageData.length} 字节 (${frame.width}×${frame.height} 灰度)`);
   console.log(`  校验和: 0x${frame.checksum.toString(16)}`);
 
   // 将灰度数据显示到 Canvas
@@ -164,76 +164,13 @@ function appendToLogConsole(text: string) {
  */
 function handleResourceFrame(frame: ResourceFrame) {
   console.log('[资源信息]');
-  console.log(`  CPU 占用: ${frame.cpuUsage}%`);
-  console.log(`  RAM 占用: ${frame.ramUsage}%`);
-  console.log(
-    `  Heap 剩余: ${frame.freeHeap} / ${frame.ramTotal} 字节`,
-  );
-  console.log(
-    `  Stack 剩余: ${frame.freeStack} / ${frame.ramTotal} 字节`,
-  );
-  console.log(`  速度: ${(frame.speed / 1000).toFixed(2)} m/s`);
-  console.log(`  舵机角度: ${(frame.servoAngle / 10).toFixed(1)}°`);
+  console.log(`  Length: ${frame.length}B, resData: ${frame.resData.length}B`);
 
-  // 更新仪表板
-  updateDashboard(frame);
+  // 具体 Cell 值由 ResourceFrameProcessor 根据 resourceSlots 配置解析
+  // 这里只展示协议层数据
 }
 
-interface DashboardState {
-  cpuUsage: number;
-  ramUsage: number;
-  heapUsage: number;
-  stackUsage: number;
-  speed: number;
-  servoAngle: number;
-}
-
-const dashboardState: DashboardState = {
-  cpuUsage: 0,
-  ramUsage: 0,
-  heapUsage: 0,
-  stackUsage: 0,
-  speed: 0,
-  servoAngle: 0,
-};
-
-function updateDashboard(frame: ResourceFrame) {
-  // 计算占用率百分比
-  const heapUsage  = frame.ramTotal > 0 ? ((frame.ramTotal - frame.freeHeap)  / frame.ramTotal * 100) : 0;
-  const stackUsage = frame.ramTotal > 0 ? ((frame.ramTotal - frame.freeStack) / frame.ramTotal * 100) : 0;
-
-  dashboardState.cpuUsage   = frame.cpuUsage;
-  dashboardState.ramUsage   = frame.ramUsage;
-  dashboardState.heapUsage  = heapUsage;
-  dashboardState.stackUsage = stackUsage;
-  dashboardState.speed      = frame.speed;
-  dashboardState.servoAngle = frame.servoAngle;
-
-  updateProgressBar('cpu-bar',   frame.cpuUsage);
-  updateProgressBar('ram-bar',   frame.ramUsage);
-  updateProgressBar('heap-bar',  heapUsage);
-  updateProgressBar('stack-bar', stackUsage);
-
-  document.getElementById('speed-value')!.textContent =
-    (frame.speed / 1000).toFixed(2) + ' m/s';
-  document.getElementById('servo-value')!.textContent =
-    (frame.servoAngle / 10).toFixed(1) + '°';
-}
-
-function updateProgressBar(elementId: string, percentage: number) {
-  const element = document.getElementById(elementId) as HTMLElement;
-  if (!element) return;
-
-  element.style.width = `${Math.min(percentage, 100)}%`;
-  element.style.backgroundColor = getColorForUsage(percentage);
-  element.textContent = `${Math.round(percentage)}%`;
-}
-
-function getColorForUsage(percentage: number): string {
-  if (percentage > 80) return '#ff4444'; // 红色 - 危险
-  if (percentage > 60) return '#ffaa00'; // 橙色 - 警告
-  return '#44aa44'; // 绿色 - 正常
-}
+// 仪表板示例数据在业务层通过 ResourceFrameProcessor.process() 获取 values[] 后渲染
 
 /**
  * 示例 6: 发送命令到 MCU

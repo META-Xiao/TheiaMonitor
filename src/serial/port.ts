@@ -47,6 +47,27 @@ export interface SerialPortDisconnectEvent extends Event {
   target: SerialPort;
 }
 
+const USB_NAMES: Record<number, string> = {
+  0x0403: "FTDI",
+  0x10C4: "CP210x",
+  0x1A86: "CH340",
+  0x067B: "PL2303",
+  0x2341: "Arduino",
+  0x239A: "Adafruit",
+  0x0483: "STM32",
+  0x1D50: "OpenMoko",
+  0x16C0: "Teensy",
+};
+
+export function deviceNameFromInfo(info: SerialPortInfo): string {
+  if (info.usbVendorId !== undefined) {
+    const vendor = USB_NAMES[info.usbVendorId];
+    const pid = info.usbProductId !== undefined ? `:${info.usbProductId.toString(16).toUpperCase().padStart(4, "0")}` : "";
+    return vendor ? `${vendor}${pid}` : `VID:${info.usbVendorId.toString(16).toUpperCase().padStart(4, "0")}${pid}`;
+  }
+  return "Serial";
+}
+
 /**
  * WebSerial 端口管理器
  */

@@ -164,22 +164,26 @@ describe('FrameParser', () => {
   });
 
   describe('Resource Frame (0xEE)', () => {
-    it('should parse valid resource frame', () => {
-      const frameData = new Uint8Array(17);
-      frameData[0] = 50; // cpuUsage: 50%
-      frameData[1] = 75; // ramUsage: 75%
-      frameData[2] = 0x12; frameData[3] = 0x34; // freeHeap: 0x1234
-      frameData[4] = 0x56; frameData[5] = 0x78; // freeStack: 0x5678
-      frameData[6] = 0x60; frameData[7] = 0x00; // ramTotal: 24576
-      frameData[8] = 0x00; frameData[9] = 0x64; // speed: 100 mm/s
-      frameData[10] = 0x00; frameData[11] = 0xC8; // servoAngle: 200
-      frameData.set(new Uint8Array(4), 12); // reserved
+    // 默认预设: CPU(u8)+ROM(u16)+RAM(u16)+Speed(i16)+Servo(i16) = 9B
+    it('should parse resource frame — parser only extracts raw resData', () => {
+      const resData = new Uint8Array([
+        50,           // CPU = 50% (u8)
+        0x12, 0x34,   // ROM = 0x1234 (u16)
+        0x56, 0x78,   // RAM = 0x5678 (u16)
+        0x00, 0x64,   // Speed = 100 (i16)
+        0x00, 0xC8,   // Servo = 200 (i16)
+      ]);
+      const length = resData.length; // 9
 
-      const dataToCheck = new Uint8Array(17);
+      const frameData = new Uint8Array(2 + length + 1);
+      frameData[0] = (length >> 8) & 0xFF;
+      frameData[1] = length & 0xFF;
+      frameData.set(resData, 2);
+
+      const dataToCheck = new Uint8Array(1 + 2 + length);
       dataToCheck[0] = FRAME_TYPE.RESOURCE;
-      dataToCheck.set(frameData.slice(0, 16), 1);
-      const checksum = calculateChecksum(dataToCheck);
-      frameData[16] = checksum;
+      dataToCheck.set(frameData.slice(0, 2 + length), 1);
+      frameData[2 + length] = calculateChecksum(dataToCheck);
 
       const frame = new Uint8Array(1 + frameData.length);
       frame[0] = FRAME_TYPE.RESOURCE;
@@ -191,38 +195,30 @@ describe('FrameParser', () => {
 
       const resourceFrame = results[0] as ResourceFrame;
       expect(resourceFrame.type).toBe('RESOURCE');
-      expect(resourceFrame.cpuUsage).toBe(50);
-      expect(resourceFrame.ramUsage).toBe(75);
-      expect(resourceFrame.freeHeap).toBe(0x1234);
-      expect(resourceFrame.freeStack).toBe(0x5678);
-      expect(resourceFrame.ramTotal).toBe(24576);
-      expect(resourceFrame.speed).toBe(100);
-      expect(resourceFrame.servoAngle).toBe(200);
+      expect(resourceFrame.length).toBe(length);
+      expect(resourceFrame.resData.length).toBe(length);
+      expect(resourceFrame.resData[0]).toBe(50);  // CPU
+      expect(resourceFrame.resData[4]).toBe(0x78); // RAM lo byte
     });
 
-    it('should handle negative speed (int16)', () => {
-      const frameData = new Uint8Array(17);
-      frameData[0] = 50; frameData[1] = 75;
-      frameData[2] = 0x12; frameData[3] = 0x34; // freeHeap
-      frameData[4] = 0x56; frameData[5] = 0x78; // freeStack
-      frameData[6] = 0x60; frameData[7] = 0x00; // ramTotal
-      // speed: -100 as int16 = 0xFF9C (big-endian)
-      frameData[8] = 0xFF; frameData[9] = 0x9C;
-      frameData[10] = 0x00; frameData[11] = 0xC8;
-      frameData.set(new Uint8Array(4), 12);
+    it('should reject invalid checksum on resource frame', () => {
+      const resData = new Uint8Array([50, 0x12, 0x34, 0x56, 0x78, 0x00, 0x64, 0x00, 0xC8]);
+      const length = resData.length;
 
-      const dataToCheck2 = new Uint8Array(17);
-      dataToCheck2[0] = FRAME_TYPE.RESOURCE;
-      dataToCheck2.set(frameData.slice(0, 16), 1);
-      frameData[16] = calculateChecksum(dataToCheck2);
+      const frameData = new Uint8Array(2 + length + 1);
+      frameData[0] = (length >> 8) & 0xFF;
+      frameData[1] = length & 0xFF;
+      frameData.set(resData, 2);
+      frameData[2 + length] = 0xFF; // 错误校验和
 
       const frame = new Uint8Array(1 + frameData.length);
       frame[0] = FRAME_TYPE.RESOURCE;
       frame.set(frameData, 1);
 
       const results = parser.parse(frame);
-      const resourceFrame = results[0] as ResourceFrame;
-      expect(resourceFrame.speed).toBe(-100);
+      expect(results).toHaveLength(1);
+      expect(results[0]).toBeInstanceOf(FrameParseError);
+      expect((results[0] as FrameParseError).code).toBe('RESOURCE_CHECKSUM_ERROR');
     });
   });
 

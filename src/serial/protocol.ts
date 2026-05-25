@@ -8,22 +8,21 @@ export const FRAME_TYPE = {
 } as const;
 
 export const FRAME_SIZE = {
-  IMAGE: 22568,     // 0xCC: 1(ID) + 2(Frame) + 1(FPS_cam) + 1(FPS_out) + 1(width) + 1(height) + 22560(data) + 1(checksum)
+  IMAGE_MAX: 65033, // 0xCC: 1+2(Length)+2(Frame)+1(W)+1(H)+255*255(data)+1(CS) — 最大分辨率 255×255
   LOG_MAX: 260,     // 0xDD: 1 + 2 + 256 + 1 = 260
-  RESOURCE: 18,     // 0xEE: 1(ID)+1(CPU)+1(RAM)+2(freeHeap)+2(freeStack)+2(ramTotal)+2(Speed)+2(ServoAngle)+4(Reserved)+1(Checksum)
 } as const;
 
 export const BAUDRATE = 115200;
 
 /**
- * 图传帧 (0xCC) - 22568 字节
- * 帧结构: ID(1) + Frame(2) + FPS_cam(1) + FPS_out(1) + Width(1) + Height(1) + ImageData(W×H) + Checksum(1)
+ * 图传帧 (0xCC)
+ * 帧结构: ID(1) + Length(2) + Frame(2) + Width(1) + Height(1) + ImageData(W×H) + Checksum(1)
+ * Length = Frame(2) + Width(1) + Height(1) + ImageData(W×H) = 4 + W×H
  */
 export interface ImageFrame {
   type: 'IMAGE';
+  length: number;         // 2字节 uint16 大端，帧头后+校验和前总字节数
   frameId: number;        // 2字节 uint16 大端
-  fpsCam: number;         // 1字节 摄像头帧率
-  fpsOut: number;         // 1字节 输出帧率
   width: number;          // 1字节 图像宽度（像素）
   height: number;         // 1字节 图像高度（像素）
   imageData: Uint8Array;  // width×height 字节灰度图
@@ -41,19 +40,14 @@ export interface LogFrame {
 }
 
 /**
- * 资源帧 (0xEE) - 20 字节
- * 帧结构: ID(1) + CPUUsage(1) + RAMUsage(1) + freeHeap(2) + freeStack(2) + ramTotal(2) + Speed(2) + ServoAngle(2) + Reserved(4) + Checksum(1)
+ * 资源帧 (0xEE)
+ * 帧结构: ID(1) + Length(2) + Data(Length B) + Checksum(1)
+ * Data 为不透明数据块，由 resourceSlots 配置决定内部 Cell 划分
  */
 export interface ResourceFrame {
   type: 'RESOURCE';
-  cpuUsage: number;       // 1字节 (%)
-  ramUsage: number;       // 1字节 (%)
-  freeHeap: number;       // 2字节 剩余堆内存字节数
-  freeStack: number;      // 2字节 剩余栈内存字节数
-  ramTotal: number;       // 2字节 总内存字节数（MCU自报）
-  speed: number;          // 2字节 (int16, mm/s)
-  servoAngle: number;     // 2字节 (int16, 度×10)
-  reserved: Uint8Array;   // 4字节
+  length: number;         // 2字节 uint16 大端，Data 字节数
+  resData: Uint8Array;    // Length 字节原始数据
   checksum: number;       // 1字节
 }
 

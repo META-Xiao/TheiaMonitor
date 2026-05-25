@@ -4,8 +4,8 @@
   </div>
   <svg :viewBox="`0 0 ${viewW} ${viewH}`" preserveAspectRatio="none" class="card-chart">
     <template v-if="points.length >= 2">
-      <path class="card-area" :d="areaPath(points, viewW, viewH, max)" />
-      <path class="card-line" :d="linePath(points, viewW, viewH, max)" :style="color ? { stroke: color } : {}" />
+      <path class="card-area" :d="areaPath(points, viewW, viewH, max, chartType === 'delta')" />
+      <path class="card-line" :d="chartType === 'delta' ? smoothPath(points, viewW, viewH, max) : linePath(points, viewW, viewH, max)" :style="color ? { stroke: color } : {}" />
     </template>
   </svg>
 </template>
@@ -22,9 +22,10 @@ const props = withDefaults(defineProps<{
   padding?: number
   viewW?: number
   viewH?: number
-}>(), { max: 100, padding: 9, viewW: 220, viewH: 88 });
+  chartType?: 'line' | 'delta'
+}>(), { max: 100, padding: 9, viewW: 220, viewH: 88, chartType: 'line' });
 
-const { linePath, areaPath } = useChartPath(props.padding);
+const { linePath, smoothPath, areaPath } = useChartPath(props.padding);
 </script>
 
 <style scoped>

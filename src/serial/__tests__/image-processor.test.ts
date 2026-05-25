@@ -31,8 +31,7 @@ describe('ImageFrameProcessor', () => {
     const frame: ImageFrame = {
       type: 'IMAGE',
       frameId: 100,
-      fpsCam: 100,
-      fpsOut: 25,
+      length: 4 + TOTAL_PIXELS,
       width: WIDTH,
       height: HEIGHT,
       imageData,
@@ -42,7 +41,6 @@ describe('ImageFrameProcessor', () => {
     const processed = processor.process(frame);
 
     expect(processed.frameId).toBe(100);
-    expect(processed.fpsOut).toBe(25);
     expect(processed.width).toBe(WIDTH);
     expect(processed.height).toBe(HEIGHT);
     expect(processed.pixelData.length).toBe(TOTAL_PIXELS * 4);
@@ -57,8 +55,7 @@ describe('ImageFrameProcessor', () => {
     const frame: ImageFrame = {
       type: 'IMAGE',
       frameId: 1,
-      fpsCam: 100,
-      fpsOut: 25,
+      length: 4 + TOTAL_PIXELS,
       width: WIDTH,
       height: HEIGHT,
       imageData,
@@ -87,8 +84,7 @@ describe('ImageFrameProcessor', () => {
     const frame: ImageFrame = {
       type: 'IMAGE',
       frameId: 1,
-      fpsCam: 100,
-      fpsOut: 25,
+      length: 4 + TOTAL_PIXELS,
       width: WIDTH,
       height: HEIGHT,
       imageData,
@@ -103,9 +99,8 @@ describe('ImageFrameProcessor', () => {
 
     const frame1: ImageFrame = {
       type: 'IMAGE',
+      length: 4 + TOTAL_PIXELS,
       frameId: 1,
-      fpsCam: 100,
-      fpsOut: 25,
       width: WIDTH,
       height: HEIGHT,
       imageData,
@@ -117,9 +112,8 @@ describe('ImageFrameProcessor', () => {
 
     const frame2: ImageFrame = {
       type: 'IMAGE',
+      length: 4 + TOTAL_PIXELS,
       frameId: 2,
-      fpsCam: 100,
-      fpsOut: 25,
       width: WIDTH,
       height: HEIGHT,
       imageData,
@@ -137,8 +131,7 @@ describe('ImageFrameProcessor', () => {
     const frame: ImageFrame = {
       type: 'IMAGE',
       frameId: 1,
-      fpsCam: 100,
-      fpsOut: 25,
+      length: 4 + TOTAL_PIXELS,
       width: WIDTH,
       height: HEIGHT,
       imageData,
@@ -169,7 +162,6 @@ describe('ImageDataStore', () => {
   const createProcessedFrame = (frameId: number): ProcessedImageData => {
     return {
       frameId,
-      fpsOut: 25,
       width: 188,
       height: 120,
       pixelData: new Uint8ClampedArray(188 * 120 * 4),
@@ -228,7 +220,6 @@ describe('ImageDataStore', () => {
 
     const frame1: ProcessedImageData = {
       frameId: 1,
-      fpsOut: 0,
       width: 188,
       height: 120,
       pixelData: new Uint8ClampedArray(188 * 120 * 4),
@@ -241,7 +232,6 @@ describe('ImageDataStore', () => {
       for (let i = 2; i <= 10; i++) {
         const frame: ProcessedImageData = {
           frameId: i,
-          fpsOut: 0,
           width: 188,
           height: 120,
           pixelData: new Uint8ClampedArray(188 * 120 * 4),

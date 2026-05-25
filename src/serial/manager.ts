@@ -1,4 +1,4 @@
-import { SerialPortManager, SerialOptions } from './port';
+import { SerialPortManager, SerialOptions, deviceNameFromInfo } from './port';
 import { FrameParser, FrameParseError } from './parser';
 import { TelemetryFrame, BAUDRATE } from './protocol';
 
@@ -54,7 +54,9 @@ export class TelemetrySerialManager {
   async connect(baudRate: number = BAUDRATE): Promise<void> {
     try {
       await this.portManager.open(baudRate);
-      this.emitEvent({ type: 'CONNECTED' });
+      const info = this.portManager.getPortInfo();
+      const deviceName = info ? deviceNameFromInfo(info) : "Serial";
+      this.emitEvent({ type: 'CONNECTED', info: { deviceName } });
       this.startReading();
     } catch (error) {
       this.emitEvent({

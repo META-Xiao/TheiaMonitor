@@ -2,6 +2,10 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { ResourceFrameProcessor, ResourceDataStore, ProcessedResourceData } from '../resource-processor';
 import { ResourceFrame } from '../protocol';
 
+function makeFrame(resData: Uint8Array): ResourceFrame {
+  return { type: 'RESOURCE', length: resData.length, resData, checksum: 0 };
+}
+
 describe('ResourceFrameProcessor', () => {
   let processor: ResourceFrameProcessor;
 
@@ -9,160 +13,61 @@ describe('ResourceFrameProcessor', () => {
     processor = new ResourceFrameProcessor();
   });
 
-  it('should process valid resource frame', () => {
-    const frame: ResourceFrame = {
-      type: 'RESOURCE',
-      cpuUsage: 45,
-      ramUsage: 60,
-      freeHeap: 1024,
-      freeStack: 512,
-      ramTotal: 24576,
-      speed: 100,
-      servoAngle: 500,
-      reserved: new Uint8Array(4),
-      checksum: 0,
-    };
+  // 默认 preset: CPU(u8) + ROM(u16) + RAM(u16) + Speed(i16) + Servo(i16) = 9B
+  it('should parse resData into res[] according to default slots', () => {
+    const resData = new Uint8Array([
+      50,           // CPU = 50 (u8)
+      0x12, 0x34,   // ROM = 0x1234 = 4660 (u16)
+      0x56, 0x78,   // RAM = 0x5678 = 22136 (u16)
+      0x00, 0x64,   // Speed = 100 (i16)
+      0x00, 0xC8,   // Servo = 200 (i16)
+    ]);
 
-    const processed = processor.process(frame);
+    const processed = processor.process(makeFrame(resData));
 
-    expect(processed.cpuUsage).toBe(45);
-    expect(processed.ramUsage).toBe(60);
-    expect(processed.freeHeap).toBe(1024);
-    expect(processed.freeStack).toBe(512);
-    expect(processed.speed).toBe(100);
-    expect(processed.servoAngle).toBe(500);
+    expect(processed.res).toHaveLength(5);
+    expect(processed.res[0]).toBe(50);    // CPU
+    expect(processed.res[1]).toBe(0x1234); // ROM
+    expect(processed.res[2]).toBe(0x5678); // RAM
+    expect(processed.res[3]).toBe(100);   // Speed
+    expect(processed.res[4]).toBe(200);   // Servo
+    expect(processed.values).toHaveLength(5);
     expect(processed.timestamp).toBeGreaterThan(0);
   });
 
-  it('should throw error for invalid CPU usage above 100', () => {
-    const frame: ResourceFrame = {
-      type: 'RESOURCE',
-      cpuUsage: 105,
-      ramUsage: 50,
-      freeHeap: 1024,
-      freeStack: 512,
-      ramTotal: 24576,
-      speed: 100,
-      servoAngle: 500,
-      reserved: new Uint8Array(4),
-      checksum: 0,
-    };
+  it('should handle negative i16 values', () => {
+    const resData = new Uint8Array([
+      50, 0x12, 0x34, 0x56, 0x78,
+      0xFF, 0x9C,   // Speed = -100 (i16)
+      0x00, 0xC8,
+    ]);
 
-    expect(() => processor.process(frame)).toThrow('Invalid CPU usage');
+    const processed = processor.process(makeFrame(resData));
+    expect(processed.res[3]).toBe(-100);
   });
 
-  it('should throw error for invalid CPU usage below 0', () => {
-    const frame: ResourceFrame = {
-      type: 'RESOURCE',
-      cpuUsage: -1,
-      ramUsage: 50,
-      freeHeap: 1024,
-      freeStack: 512,
-      ramTotal: 24576,
-      speed: 100,
-      servoAngle: 500,
-      reserved: new Uint8Array(4),
-      checksum: 0,
-    };
+  it('should handle edge values 0 and max', () => {
+    const resData = new Uint8Array([
+      0,            // CPU = 0
+      0, 0,         // ROM = 0
+      0xFF, 0xFF,   // RAM = 65535
+      0x7F, 0xFF,   // Speed = 32767
+      0x80, 0x00,   // Servo = -32768
+    ]);
 
-    expect(() => processor.process(frame)).toThrow('Invalid CPU usage');
+    const processed = processor.process(makeFrame(resData));
+    expect(processed.res[0]).toBe(0);
+    expect(processed.res[1]).toBe(0);
+    expect(processed.res[2]).toBe(65535);
+    expect(processed.res[3]).toBe(32767);
+    expect(processed.res[4]).toBe(-32768);
   });
 
-  it('should throw error for invalid RAM usage above 100', () => {
-    const frame: ResourceFrame = {
-      type: 'RESOURCE',
-      cpuUsage: 50,
-      ramUsage: 105,
-      freeHeap: 1024,
-      freeStack: 512,
-      ramTotal: 24576,
-      speed: 100,
-      servoAngle: 500,
-      reserved: new Uint8Array(4),
-      checksum: 0,
-    };
+  it('should stop parsing when resData is shorter than total slot bytes', () => {
+    const resData = new Uint8Array([50, 0x12]); // only 2 bytes, slots need 9
 
-    expect(() => processor.process(frame)).toThrow('Invalid RAM usage');
-  });
-
-  it('should throw error for invalid RAM usage below 0', () => {
-    const frame: ResourceFrame = {
-      type: 'RESOURCE',
-      cpuUsage: 50,
-      ramUsage: -1,
-      freeHeap: 1024,
-      freeStack: 512,
-      ramTotal: 24576,
-      speed: 100,
-      servoAngle: 500,
-      reserved: new Uint8Array(4),
-      checksum: 0,
-    };
-
-    expect(() => processor.process(frame)).toThrow('Invalid RAM usage');
-  });
-
-  it('should cache last processed frame', () => {
-    const frame: ResourceFrame = {
-      type: 'RESOURCE',
-      cpuUsage: 50,
-      ramUsage: 60,
-      freeHeap: 1024,
-      freeStack: 512,
-      ramTotal: 24576,
-      speed: 100,
-      servoAngle: 500,
-      reserved: new Uint8Array(4),
-      checksum: 0,
-    };
-
-    expect(processor.getLastFrame()).toBeNull();
-
-    processor.process(frame);
-    const lastFrame = processor.getLastFrame();
-
-    expect(lastFrame).not.toBeNull();
-    expect(lastFrame?.cpuUsage).toBe(50);
-  });
-
-  it('should clear last processed frame', () => {
-    const frame: ResourceFrame = {
-      type: 'RESOURCE',
-      cpuUsage: 50,
-      ramUsage: 60,
-      freeHeap: 1024,
-      freeStack: 512,
-      ramTotal: 24576,
-      speed: 100,
-      servoAngle: 500,
-      reserved: new Uint8Array(4),
-      checksum: 0,
-    };
-
-    processor.process(frame);
-    expect(processor.getLastFrame()).not.toBeNull();
-
-    processor.clear();
-    expect(processor.getLastFrame()).toBeNull();
-  });
-
-  it('should accept edge case values 0 and 100 for percentages', () => {
-    const frame: ResourceFrame = {
-      type: 'RESOURCE',
-      cpuUsage: 0,
-      ramUsage: 100,
-      freeHeap: 0,
-      freeStack: 65535,
-      ramTotal: 24576,
-      speed: -32768,
-      servoAngle: 32767,
-      reserved: new Uint8Array(4),
-      checksum: 0,
-    };
-
-    const processed = processor.process(frame);
-    expect(processed.cpuUsage).toBe(0);
-    expect(processed.ramUsage).toBe(100);
+    const processed = processor.process(makeFrame(resData));
+    expect(processed.res.length).toBeLessThan(5);
   });
 });
 
@@ -173,254 +78,44 @@ describe('ResourceDataStore', () => {
     store = new ResourceDataStore(10);
   });
 
-  it('should store resource data', () => {
-    const data: ProcessedResourceData = {
-      cpuUsage: 50,
-      ramUsage: 60,
-      freeHeap: 1024,
-      freeStack: 512,
-      ramTotal: 24576,
-      speed: 100,
-      servoAngle: 500,
-      timestamp: Date.now(),
-    };
+  function makeData(cpu: number): ProcessedResourceData {
+    return { res: [cpu, 0, 0, 0, 0], values: [cpu, 0, 0, 0, 0], timestamp: Date.now() };
+  }
 
+  it('should store and retrieve current data', () => {
+    const data = makeData(50);
     store.storeData(data);
     expect(store.getBufferSize()).toBe(1);
-  });
-
-  it('should get current data', () => {
-    const data: ProcessedResourceData = {
-      cpuUsage: 50,
-      ramUsage: 60,
-      freeHeap: 1024,
-      freeStack: 512,
-      ramTotal: 24576,
-      speed: 100,
-      servoAngle: 500,
-      timestamp: Date.now(),
-    };
-
-    store.storeData(data);
-    const current = store.getCurrentData();
-
-    expect(current).not.toBeNull();
-    expect(current?.cpuUsage).toBe(50);
+    expect(store.getCurrentData()?.res[0]).toBe(50);
   });
 
   it('should get all data', () => {
-    const data1: ProcessedResourceData = {
-      cpuUsage: 50,
-      ramUsage: 60,
-      freeHeap: 1024,
-      freeStack: 512,
-      ramTotal: 24576,
-      speed: 100,
-      servoAngle: 500,
-      timestamp: Date.now(),
-    };
-
-    const data2: ProcessedResourceData = {
-      cpuUsage: 60,
-      ramUsage: 70,
-      freeHeap: 2048,
-      freeStack: 1024,
-      ramTotal: 24576,
-      speed: 200,
-      servoAngle: 600,
-      timestamp: Date.now() + 100,
-    };
-
-    store.storeData(data1);
-    store.storeData(data2);
-
-    const all = store.getAllData();
-    expect(all.length).toBe(2);
-    expect(all[0].cpuUsage).toBe(50);
-    expect(all[1].cpuUsage).toBe(60);
-  });
-
-  it('should calculate statistics correctly', () => {
-    store.storeData({
-      cpuUsage: 40,
-      ramUsage: 50,
-      freeHeap: 1000,
-      freeStack: 500,
-      ramTotal: 24576,
-      speed: 100,
-      servoAngle: 400,
-      timestamp: Date.now(),
-    });
-
-    store.storeData({
-      cpuUsage: 60,
-      ramUsage: 70,
-      freeHeap: 2000,
-      freeStack: 1000,
-      ramTotal: 24576,
-      speed: 200,
-      servoAngle: 600,
-      timestamp: Date.now() + 100,
-    });
-
-    const stats = store.getStats();
-
-    expect(stats.cpuUsageAvg).toBe(50);
-    expect(stats.cpuUsageMax).toBe(60);
-    expect(stats.cpuUsageMin).toBe(40);
-    expect(stats.ramUsageAvg).toBe(60);
-    expect(stats.ramUsageMax).toBe(70);
-    expect(stats.ramUsageMin).toBe(50);
-    expect(stats.speedAvg).toBe(150);
-    expect(stats.speedMax).toBe(200);
-    expect(stats.speedMin).toBe(100);
-    expect(stats.servoAngleAvg).toBe(500);
-    expect(stats.servoAngleMax).toBe(600);
-    expect(stats.servoAngleMin).toBe(400);
+    store.storeData(makeData(40));
+    store.storeData(makeData(60));
+    expect(store.getAllData()).toHaveLength(2);
   });
 
   it('should limit buffer size', () => {
-    for (let i = 0; i < 15; i++) {
-      store.storeData({
-        cpuUsage: i,
-        ramUsage: i,
-        freeHeap: i * 100,
-        freeStack: i * 50,
-        ramTotal: 24576,
-        speed: i * 10,
-        servoAngle: i * 20,
-        timestamp: Date.now() + i * 100,
-      });
-    }
-
+    for (let i = 0; i < 15; i++) store.storeData(makeData(i));
     expect(store.getBufferSize()).toBe(10);
   });
 
-  it('should get data since timestamp', () => {
+  it('should filter data since timestamp', () => {
     const now = Date.now();
-
-    store.storeData({
-      cpuUsage: 50,
-      ramUsage: 60,
-      freeHeap: 1024,
-      freeStack: 512,
-      ramTotal: 24576,
-      speed: 100,
-      servoAngle: 500,
-      timestamp: now - 1000,
-    });
-
-    store.storeData({
-      cpuUsage: 60,
-      ramUsage: 70,
-      freeHeap: 2048,
-      freeStack: 1024,
-      ramTotal: 24576,
-      speed: 200,
-      servoAngle: 600,
-      timestamp: now,
-    });
-
-    const recent = store.getDataSince(now - 500);
-    expect(recent.length).toBe(1);
-    expect(recent[0].cpuUsage).toBe(60);
+    store.storeData({ res: [50], values: [50], timestamp: now - 1000 });
+    store.storeData({ res: [60], values: [60], timestamp: now });
+    expect(store.getDataSince(now - 500)).toHaveLength(1);
   });
 
-  it('should handle empty stats', () => {
-    const stats = store.getStats();
-
-    expect(stats.cpuUsageAvg).toBe(0);
-    expect(stats.cpuUsageMax).toBe(0);
-    expect(stats.cpuUsageMin).toBe(0);
-    expect(stats.ramUsageAvg).toBe(0);
-    expect(stats.ramUsageMax).toBe(0);
-    expect(stats.ramUsageMin).toBe(0);
-  });
-
-  it('should clear all data and reset stats', () => {
-    store.storeData({
-      cpuUsage: 50,
-      ramUsage: 60,
-      freeHeap: 1024,
-      freeStack: 512,
-      ramTotal: 24576,
-      speed: 100,
-      servoAngle: 500,
-      timestamp: Date.now(),
-    });
-
-    expect(store.getBufferSize()).toBe(1);
-
+  it('should clear all data', () => {
+    store.storeData(makeData(50));
     store.clear();
-
     expect(store.getBufferSize()).toBe(0);
     expect(store.getCurrentData()).toBeNull();
-
-    const stats = store.getStats();
-    expect(stats.cpuUsageAvg).toBe(0);
   });
 
   it('should calculate buffer utilization', () => {
-    store.storeData({
-      cpuUsage: 50,
-      ramUsage: 60,
-      freeHeap: 1024,
-      freeStack: 512,
-      ramTotal: 24576,
-      speed: 100,
-      servoAngle: 500,
-      timestamp: Date.now(),
-    });
-
-    const utilization = store.getBufferUtilization();
-    expect(utilization).toBe(10);
-  });
-
-  it('should recalculate stats after buffer overflow', () => {
-    for (let i = 0; i < 12; i++) {
-      store.storeData({
-        cpuUsage: 50 + i,
-        ramUsage: 60 + i,
-        freeHeap: 1024,
-        freeStack: 512,
-        ramTotal: 24576,
-        speed: 100 + i * 10,
-        servoAngle: 500 + i * 10,
-        timestamp: Date.now() + i * 100,
-      });
-    }
-
-    const stats = store.getStats();
-    expect(stats.cpuUsageMax).toBeLessThanOrEqual(61);
-    expect(stats.cpuUsageMin).toBeGreaterThanOrEqual(52);
-  });
-
-  it('should handle negative speed values', () => {
-    store.storeData({
-      cpuUsage: 50,
-      ramUsage: 60,
-      freeHeap: 1024,
-      freeStack: 512,
-      ramTotal: 24576,
-      speed: -100,
-      servoAngle: 500,
-      timestamp: Date.now(),
-    });
-
-    store.storeData({
-      cpuUsage: 50,
-      ramUsage: 60,
-      freeHeap: 1024,
-      freeStack: 512,
-      ramTotal: 24576,
-      speed: 100,
-      servoAngle: 500,
-      timestamp: Date.now() + 100,
-    });
-
-    const stats = store.getStats();
-    expect(stats.speedAvg).toBe(0);
-    expect(stats.speedMax).toBe(100);
-    expect(stats.speedMin).toBe(-100);
+    store.storeData(makeData(50));
+    expect(store.getBufferUtilization()).toBe(10); // 1/10 * 100
   });
 });

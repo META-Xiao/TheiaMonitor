@@ -103,7 +103,7 @@ export class FrameParser {
         this.currentFrameType = FRAME_TYPE.IMAGE;
         this.state = FrameParseState.READ_IMAGE_DATA;
         this.bufferPos = 0;
-        this.targetSize = FRAME_SIZE.IMAGE - 1; // 不含帧头本身
+        this.targetSize = 0; // 先读 Length 字段动态确定大小
         return null;
 
       case FRAME_TYPE.LOG:
@@ -117,7 +117,7 @@ export class FrameParser {
         this.currentFrameType = FRAME_TYPE.RESOURCE;
         this.state = FrameParseState.READ_RESOURCE_DATA;
         this.bufferPos = 0;
-        this.targetSize = FRAME_SIZE.RESOURCE - 1; // 不含帧头
+        this.targetSize = 0; // 先读 Length 字段动态确定大小
         return null;
 
       default:
@@ -127,37 +127,43 @@ export class FrameParser {
   }
 
   /**
-   * 读图传帧数据：frameId(2) + fpsCam(1) + fpsOut(1) + width(1) + height(1) + imageData(W×H) + checksum(1)
-   * 注意：帧头读到时 targetSize 已设为 FRAME_SIZE.IMAGE-1，但 width/height 在前6字节里，
-   * 实际 imageData 大小 = width × height，需动态确定。
-   * 为简化状态机，先读前6字节确定尺寸，再读剩余数据。
+   * 读图传帧数据：Length(2) + Frame(2) + Width(1) + Height(1) + ImageData(W×H) + Checksum(1)
+   * 先读前2字节获取 Length，动态确定帧边界，再按 Length 读取剩余数据。
    */
   private handleImageData(byte: number): TelemetryFrame | null {
     this.buffer[this.bufferPos++] = byte;
 
-    // 前6字节：frameId(2) + fpsCam(1) + fpsOut(1) + width(1) + height(1)
-    if (this.bufferPos === 6) {
-      const w = this.buffer[4];
-      const h = this.buffer[5];
-      this.targetSize = 6 + w * h + 1; // +1 for checksum
+    // 前2字节为 Length
+    if (this.bufferPos === 2) {
+      const length = (this.buffer[0] << 8) | this.buffer[1];
+      // targetSize = Length字段(2) + 数据体(length) + checksum(1)
+      this.targetSize = length + 3;
       if (this.buffer.length < this.targetSize) {
         const grown = new Uint8Array(this.targetSize);
-        grown.set(this.buffer.slice(0, 6));
+        grown.set(this.buffer.slice(0, 2));
         this.buffer = grown;
       }
-    }
-
-    if (this.bufferPos < this.targetSize || this.targetSize === 0) {
       return null;
     }
 
-    const frameId = (this.buffer[0] << 8) | this.buffer[1];
-    const fpsCam = this.buffer[2];
-    const fpsOut = this.buffer[3];
+    if (this.targetSize === 0 || this.bufferPos < this.targetSize) {
+      return null;
+    }
+
+    const length = (this.buffer[0] << 8) | this.buffer[1];
+    const frameId = (this.buffer[2] << 8) | this.buffer[3];
     const width = this.buffer[4];
     const height = this.buffer[5];
-    const imageData = this.buffer.slice(6, 6 + width * height);
+    const imageDataSize = length - 4; // 减去 Frame(2)+Width(1)+Height(1)
+    const imageData = this.buffer.slice(6, 6 + imageDataSize);
     const checksum = this.buffer[this.bufferPos - 1];
+
+    if (imageDataSize !== width * height) {
+      throw new FrameParseError(
+        'IMAGE_SIZE_MISMATCH',
+        `Image size mismatch: Length implies ${imageDataSize} bytes, but ${width}×${height}=${width * height}`,
+      );
+    }
 
     const dataToCheck = new Uint8Array(1 + this.bufferPos - 1);
     dataToCheck[0] = FRAME_TYPE.IMAGE;
@@ -173,9 +179,8 @@ export class FrameParser {
 
     const frame: ImageFrame = {
       type: 'IMAGE',
+      length,
       frameId,
-      fpsCam,
-      fpsOut,
       width,
       height,
       imageData: new Uint8Array(imageData),
@@ -256,52 +261,42 @@ export class FrameParser {
   }
 
   /**
-   * 读资源帧数据：cpu(1) + ram(1) + xdata(2) + edata(2) + speed(2) + servo(2) + reserved(6) + checksum(1)
+   * 读资源帧数据：Length(2) + Data(Length B) + Checksum(1)
+   * Parser 不关心 Data 内部划分，仅按 Length 读取原始字节。
    */
   private handleResourceData(byte: number): TelemetryFrame | null {
     this.buffer[this.bufferPos++] = byte;
 
-    if (this.bufferPos < this.targetSize) {
-      return null; // 继续读取
+    // 前2字节为 Length
+    if (this.bufferPos === 2) {
+      const length = (this.buffer[0] << 8) | this.buffer[1];
+      // targetSize = Length字段(2) + Data(length) + Checksum(1)
+      this.targetSize = length + 3;
+      if (this.buffer.length < this.targetSize) {
+        const grown = new Uint8Array(this.targetSize);
+        grown.set(this.buffer.slice(0, 2));
+        this.buffer = grown;
+      }
+      return null;
     }
 
-    const cpuUsage = this.buffer[0];
-    const ramUsage = this.buffer[1];
-    const freeHeap  = (this.buffer[2] << 8) | this.buffer[3];
-    const freeStack = (this.buffer[4] << 8) | this.buffer[5];
-    const ramTotal  = (this.buffer[6] << 8) | this.buffer[7];
-    const speed = ((this.buffer[8] & 0x80) ? -(0x10000 - ((this.buffer[8] << 8) | this.buffer[9])) : ((this.buffer[8] << 8) | this.buffer[9]));
-    const servoAngle = ((this.buffer[10] & 0x80) ? -(0x10000 - ((this.buffer[10] << 8) | this.buffer[11])) : ((this.buffer[10] << 8) | this.buffer[11]));
-    const reserved = this.buffer.slice(12, 16);
-    const checksum = this.buffer[16];
+    if (this.targetSize === 0 || this.bufferPos < this.targetSize) {
+      return null;
+    }
 
-    // 校验：MCU 的 checksum 包含帧头字节 0xEE
-    const dataToCheck = new Uint8Array(1 + 16);
+    const length = (this.buffer[0] << 8) | this.buffer[1];
+    const resData = this.buffer.slice(2, 2 + length);
+    const checksum = this.buffer[this.bufferPos - 1];
+
+    const dataToCheck = new Uint8Array(1 + this.bufferPos - 1);
     dataToCheck[0] = FRAME_TYPE.RESOURCE;
-    dataToCheck.set(this.buffer.slice(0, 16), 1);
+    dataToCheck.set(this.buffer.slice(0, this.bufferPos - 1), 1);
     if (!verifyChecksum(dataToCheck, checksum)) {
-      throw new FrameParseError(
-        'RESOURCE_CHECKSUM_ERROR',
-        `Resource frame checksum mismatch`,
-      );
+      throw new FrameParseError('RESOURCE_CHECKSUM_ERROR', 'Resource frame checksum mismatch');
     }
 
     this.resetState();
-
-    const frame: ResourceFrame = {
-      type: 'RESOURCE',
-      cpuUsage,
-      ramUsage,
-      freeHeap,
-      freeStack,
-      ramTotal,
-      speed,
-      servoAngle,
-      reserved,
-      checksum,
-    };
-
-    return frame;
+    return { type: 'RESOURCE', length, resData: new Uint8Array(resData), checksum } as ResourceFrame;
   }
 
   /**

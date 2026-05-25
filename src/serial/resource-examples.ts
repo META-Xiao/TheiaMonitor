@@ -1,5 +1,6 @@
 import { TelemetrySerialManager } from './manager';
 import { ResourceManager } from './resource-manager';
+import { resourceSlots } from '../stores/resourceSlots';
 
 export async function example1_basicResourceUsage() {
   const serialManager = new TelemetrySerialManager();
@@ -7,7 +8,7 @@ export async function example1_basicResourceUsage() {
 
   resourceManager.attach(serialManager);
 
-  resourceManager.getStats();
+  resourceManager.getBufferSize();
 }
 
 export async function example2_realtimeMonitoring() {
@@ -18,10 +19,10 @@ export async function example2_realtimeMonitoring() {
 
   const currentData = resourceManager.getCurrentData();
   if (currentData) {
-    console.log(`CPU: ${currentData.cpuUsage}%`);
-    console.log(`RAM: ${currentData.ramUsage}%`);
-    console.log(`Speed: ${currentData.speed} mm/s`);
-    console.log(`Servo: ${(currentData.servoAngle / 10).toFixed(1)} degrees`);
+    const labels = resourceSlots.map((s) => s.label);
+    currentData.values.forEach((v, i) => {
+      console.log(`${labels[i] ?? `Slot${i}`}: ${v}`);
+    });
   }
 }
 
@@ -35,12 +36,7 @@ export async function example3_dataAnalysis() {
   const stats = resourceManager.getStats();
 
   console.log(`Total samples: ${allData.length}`);
-  console.log(`CPU Average: ${stats.cpuUsageAvg}%`);
-  console.log(`CPU Max: ${stats.cpuUsageMax}%`);
-  console.log(`CPU Min: ${stats.cpuUsageMin}%`);
-  console.log(`RAM Average: ${stats.ramUsageAvg}%`);
-  console.log(`Speed Average: ${stats.speedAvg} mm/s`);
-  console.log(`Servo Average: ${(stats.servoAngleAvg / 10).toFixed(1)} degrees`);
+  console.log('Stats:', stats);
 }
 
 export async function example4_bufferManagement() {
@@ -69,6 +65,6 @@ export async function example5_timeSeriesData() {
   console.log(`Data points in last 5 seconds: ${recentData.length}`);
 
   recentData.forEach((data, index) => {
-    console.log(`[${index}] T+${data.timestamp - fiveSecondsAgo}ms: CPU=${data.cpuUsage}%`);
+    console.log(`[${index}] T+${data.timestamp - fiveSecondsAgo}ms:`, data.values);
   });
 }
