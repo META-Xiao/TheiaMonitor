@@ -1,5 +1,5 @@
 <template>
-  <div class="page" @click="avatarOpen = false; mobileAvatarOpen = false">
+  <div class="page" @click="closePopups">
     <nav class="nav">
       <b class="logo" @click="cliOpen = !cliOpen" title="Toggle CLI (Ctrl+J)"><img src="/img/Simple_logo.svg" class="logo-img" alt="logo" /></b>
       <div class="tabs">
@@ -12,136 +12,18 @@
           {{ tab }}
         </button>
       </div>
-      <div class="avatar-wrap">
-        <!-- Record float (only when online) -->
-        <Transition name="slide-left">
-          <div v-if="conn.connected && !isReplayActive" class="rec-float">
-            <template v-if="recordState === 'idle'">
-              <button class="rec-circle" @click.stop="recordStart" title="Record"><Icon icon="lucide:circle" /></button>
-            </template>
-            <template v-else-if="recordState === 'recording'">
-              <button class="rec-icon" @click.stop="recordPause" title="Pause"><Icon icon="lucide:pause" /></button>
-              <button class="rec-icon stop" @click.stop="recordStop" title="Stop"><Icon icon="lucide:square" /></button>
-            </template>
-            <template v-else-if="recordState === 'paused'">
-              <button class="rec-icon" @click.stop="recordResume" title="Resume"><Icon icon="lucide:play" /></button>
-              <button class="rec-icon stop" @click.stop="recordStop" title="Stop"><Icon icon="lucide:square" /></button>
-            </template>
-          </div>
-        </Transition>
-
-        <div
-          class="avatar"
-          :class="avatarRingClass"
-          @click.stop="avatarOpen = !avatarOpen"
-        >
-          {{ avatarText }}
-          <Transition name="popup">
-            <div v-if="avatarOpen" class="avatar-popup connection-popup" @click.stop>
-              <!-- State 1: 通道选择（未连接 + 未回放） -->
-              <template v-if="!conn.connected && !isReplayActive">
-                <div class="connect-panel">
-                  <button
-                    v-for="ch in allChannels"
-                    :key="ch.id"
-                    class="connect-channel"
-                    :class="{ active: activeChannel === ch.id }"
-                    @click="activeChannel = ch.id"
-                  >
-                    <Icon :icon="ch.icon" />
-                    <span>{{ ch.label }}</span>
-                  </button>
-
-                  <template v-if="activeChannel !== 'replay'">
-                    <div v-if="activeChannel === 'uart'" class="connect-detail">
-                      <input v-model.number="serialDraft.baud" class="popup-input" placeholder="115200" type="number" min="1200" max="4000000" />
-                    </div>
-                    <div v-else-if="activeChannel === 'wifi'" class="connect-detail">
-                      <input v-model="serialDraft.wifiEndpoint" class="popup-input" placeholder="192.168.4.1:8080" />
-                    </div>
-                    <div v-else class="connect-detail">
-                      <span>USB Virtual COM</span>
-                    </div>
-                    <button class="popup-action" @click="connectActive">Connect</button>
-                  </template>
-
-                  <!-- Replay config area -->
-                  <template v-else>
-                    <div class="replay-config">
-                      <div class="replay-file-row" :class="replayState === 'idle' ? 'dim' : 'active'">
-                        <Icon icon="lucide:file-video" class="replay-file-icon" />
-                        <span class="replay-file-name">{{ replayState === 'idle' ? 'Choose .bin' : replayCtrl.fileName }}</span>
-                        <button class="icon-btn mute" @click="replayChooseFile" title="Choose File"><Icon icon="lucide:folder-open" /></button>
-                      </div>
-                    </div>
-                    <button class="popup-action" :disabled="replayState === 'loading'" @click="replayStartFromPanel">
-                      <template v-if="replayState === 'loading'">Parsing...</template>
-                      <template v-else>Replay</template>
-                    </button>
-                  </template>
-                </div>
-              </template>
-
-              <!-- State 2: Online（已连接，未回放） -->
-              <template v-else-if="conn.connected && !isReplayActive">
-                <div class="popup-status online">Online</div>
-                <div class="connected-panel">
-                  <div class="popup-row"><span>Device</span><b>{{ conn.mcuName }}</b></div>
-                  <div class="popup-row"><span>Link</span><b>{{ conn.portLabel }}</b></div>
-                  <div class="popup-row"><span>Uptime</span><b>{{ uptime }}</b></div>
-                  <button class="popup-action danger" @click="disconnectActive">Disconnect</button>
-                </div>
-              </template>
-
-              <!-- State 3: 回放中 -->
-              <template v-else>
-                <div class="popup-status replay">Replay</div>
-                <div class="connected-panel">
-                  <div class="popup-row"><span>File</span><b>{{ replayCtrl.fileName }}</b></div>
-                  <div class="popup-row"><span>Frames</span><b>{{ replayCurrent }} / {{ replayTotal }}</b></div>
-                  <div class="popup-row">
-                    <span>Speed</span>
-                    <input
-                      class="replay-speed"
-                      type="number"
-                      :value="replayCtrl.speed.toFixed(2)"
-                      @input="replayCtrl.speed = parseFloat(($event.target as HTMLInputElement).value) || 1.0"
-                      min="0.01" max="10.0" step="0.01"
-                    />
-                  </div>
-
-                  <template v-if="replayState === 'ready'">
-                    <button class="popup-action" @click="replayRun">Run</button>
-                  </template>
-                  <template v-else-if="replayState === 'playing'">
-                    <div class="replay-transport">
-                      <button class="icon-btn mute" @click="replayStepBack"><Icon icon="lucide:skip-back" /></button>
-                      <button class="icon-btn" @click="replayPause"><Icon icon="lucide:pause" /></button>
-                      <button class="icon-btn mute" @click="replayStepFwd"><Icon icon="lucide:skip-forward" /></button>
-                    </div>
-                  </template>
-                  <template v-else-if="replayState === 'paused'">
-                    <div class="replay-transport">
-                      <button class="icon-btn mute" @click="replayStepBack"><Icon icon="lucide:skip-back" /></button>
-                      <button class="icon-btn" @click="replayRun"><Icon icon="lucide:play" /></button>
-                      <button class="icon-btn mute" @click="replayStepFwd"><Icon icon="lucide:skip-forward" /></button>
-                    </div>
-                  </template>
-                  <template v-else-if="replayState === 'finished'">
-                    <div class="replay-transport">
-                      <button class="icon-btn mute" @click="replayStepBack"><Icon icon="lucide:skip-back" /></button>
-                      <button class="icon-btn" @click="replayRestart"><Icon icon="lucide:rotate-cw" /></button>
-                      <button class="icon-btn danger" @click="replayExit"><Icon icon="lucide:x" /></button>
-                    </div>
-                  </template>
-
-                  <button class="popup-action danger" @click="replayExit">Cancel</button>
-                </div>
-              </template>
-            </div>
-          </Transition>
-        </div>
-      </div>
+      <AvatarMenu
+        ref="avatarRef"
+        :replay-ctrl="replayCtrl"
+        :record-ctrl="recordCtrl"
+        :replay-state="replayState"
+        :replay-current="replayCurrent"
+        :replay-total="replayTotal"
+        :record-state="recordState"
+        :uptime="uptime"
+        @connect="connectActive"
+        @disconnect="disconnectActive"
+      />
     </nav>
 
     <main v-show="activeTab === 0" class="main">
@@ -230,144 +112,33 @@
           <span class="tab-label">{{ tab }}</span>
         </button>
       </div>
-      <div
-        class="avatar-m"
-        :class="avatarRingClass"
-        @click.stop="mobileAvatarOpen = !mobileAvatarOpen"
-      >
-        {{ avatarText }}
-      </div>
-
-      <!-- Mobile avatar popup — fixed above bottom-nav -->
-      <Teleport to="body">
-        <Transition name="popup">
-          <div v-if="mobileAvatarOpen" class="avatar-popup-m-fixed connection-popup" @click.stop>
-            <!-- State 1: channel select -->
-            <template v-if="!conn.connected && !isReplayActive">
-              <div class="popup-status offline">Offline</div>
-              <div class="connect-panel">
-                <button
-                  v-for="ch in allChannels"
-                  :key="ch.id"
-                  class="connect-channel"
-                  :class="{ active: activeChannel === ch.id }"
-                  @click="activeChannel = ch.id"
-                >
-                  <Icon :icon="ch.icon" />
-                  <span>{{ ch.label }}</span>
-                </button>
-
-                <template v-if="activeChannel !== 'replay'">
-                  <div v-if="activeChannel === 'uart'" class="connect-detail">
-                    <input v-model.number="serialDraft.baud" class="popup-input" placeholder="115200" type="number" min="1200" max="4000000" />
-                  </div>
-                  <div v-else-if="activeChannel === 'wifi'" class="connect-detail">
-                    <input v-model="serialDraft.wifiEndpoint" class="popup-input" placeholder="192.168.4.1:8080" />
-                  </div>
-                  <div v-else class="connect-detail">
-                    <span>USB Virtual COM</span>
-                  </div>
-                  <button class="popup-action" @click="connectActive">Connect</button>
-                </template>
-                <template v-else>
-                  <div class="replay-config">
-                    <div class="replay-file-row" :class="replayState === 'idle' ? 'dim' : 'active'">
-                      <Icon icon="lucide:file-video" class="replay-file-icon" />
-                      <span class="replay-file-name">{{ replayState === 'idle' ? 'Choose .bin' : replayCtrl.fileName }}</span>
-                      <button class="icon-btn mute" @click="replayChooseFile" title="Choose File"><Icon icon="lucide:folder-open" /></button>
-                    </div>
-                  </div>
-                  <button class="popup-action" :disabled="replayState === 'loading'" @click="replayStartFromPanel">
-                    <template v-if="replayState === 'loading'">Parsing...</template>
-                    <template v-else>Replay</template>
-                  </button>
-                </template>
-              </div>
-            </template>
-
-            <!-- State 2: Online -->
-            <template v-else-if="conn.connected && !isReplayActive">
-              <div class="popup-status online">Online</div>
-              <div class="connected-panel">
-                <div class="popup-row"><span>Device</span><b>{{ conn.mcuName }}</b></div>
-                <div class="popup-row"><span>Link</span><b>{{ conn.portLabel }}</b></div>
-                <div class="popup-row"><span>Uptime</span><b>{{ uptime }}</b></div>
-                <button class="popup-action danger" @click="disconnectActive">Disconnect</button>
-              </div>
-            </template>
-
-            <!-- State 3: Replay -->
-            <template v-else>
-              <div class="popup-status replay">Replay</div>
-              <div class="connected-panel">
-                <div class="popup-row"><span>File</span><b>{{ replayCtrl.fileName }}</b></div>
-                <div class="popup-row"><span>Frames</span><b>{{ replayCurrent }} / {{ replayTotal }}</b></div>
-                <div class="popup-row">
-                  <span>Speed</span>
-                  <input
-                    class="replay-speed"
-                    type="number"
-                    :value="replayCtrl.speed.toFixed(2)"
-                    @input="replayCtrl.speed = parseFloat(($event.target as HTMLInputElement).value) || 1.0"
-                    min="0.01" max="10.0" step="0.01"
-                  />
-                </div>
-
-                <template v-if="replayState === 'ready'">
-                  <button class="popup-action" @click="replayRun">Run</button>
-                </template>
-                <template v-else-if="replayState === 'playing'">
-                  <div class="replay-transport">
-                    <button class="icon-btn mute" @click="replayStepBack"><Icon icon="lucide:skip-back" /></button>
-                    <button class="icon-btn" @click="replayPause"><Icon icon="lucide:pause" /></button>
-                    <button class="icon-btn mute" @click="replayStepFwd"><Icon icon="lucide:skip-forward" /></button>
-                  </div>
-                </template>
-                <template v-else-if="replayState === 'paused'">
-                  <div class="replay-transport">
-                    <button class="icon-btn mute" @click="replayStepBack"><Icon icon="lucide:skip-back" /></button>
-                    <button class="icon-btn" @click="replayRun"><Icon icon="lucide:play" /></button>
-                    <button class="icon-btn mute" @click="replayStepFwd"><Icon icon="lucide:skip-forward" /></button>
-                  </div>
-                </template>
-                <template v-else-if="replayState === 'finished'">
-                  <div class="replay-transport">
-                    <button class="icon-btn mute" @click="replayStepBack"><Icon icon="lucide:skip-back" /></button>
-                    <button class="icon-btn" @click="replayRestart"><Icon icon="lucide:rotate-cw" /></button>
-                    <button class="icon-btn danger" @click="replayExit"><Icon icon="lucide:x" /></button>
-                  </div>
-                </template>
-
-                <button class="popup-action danger" @click="replayExit">Cancel</button>
-              </div>
-            </template>
-          </div>
-        </Transition>
-      </Teleport>
+      <AvatarMenu
+        ref="avatarMobileRef"
+        mobile
+        :replay-ctrl="replayCtrl"
+        :record-ctrl="recordCtrl"
+        :replay-state="replayState"
+        :replay-current="replayCurrent"
+        :replay-total="replayTotal"
+        :record-state="recordState"
+        :uptime="uptime"
+        @connect="connectActive"
+        @disconnect="disconnectActive"
+      />
     </nav>
 
-    <!-- CLI Panel -->
-    <Transition name="cli">
-      <div v-if="cliOpen" class="cli-panel" :style="{ height: cliHeight + 'px' }">
-        <div class="cli-resize-bar" @pointerdown="startCliResize" />
-        <div class="cli-header">
-          <span class="cli-title"><Icon icon="lucide:terminal" /> CLI</span>
-          <button class="cli-close" @click="cliOpen = false"><Icon icon="lucide:x" /></button>
-        </div>
-        <div class="cli-body">
-          <span class="cli-placeholder">CLI — Coming Soon</span>
-        </div>
-      </div>
-    </Transition>
+    <CliPanel v-model:open="cliOpen" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { Icon } from "@iconify/vue";
 import SettingsView from "./SettingsView.vue";
 import VisionView from "./VisionView.vue";
 import LogCard from "../components/LogCard.vue";
+import AvatarMenu from "../components/AvatarMenu.vue";
+import CliPanel from "../components/CliPanel.vue";
 import SensorCard from "../components/SensorCard.vue";
 import ServoCard from "../components/ServoCard.vue";
 import { useCanvasAnimation } from "../composables/useCanvasAnimation";
@@ -407,51 +178,6 @@ recordCtrl.setEvents({
     recordBytes.value = n;
   },
 });
-
-function recordStart() { recordCtrl.start(); }
-function recordPause() { recordCtrl.pause(); }
-function recordResume() { recordCtrl.resume(); }
-function recordStop() { recordCtrl.stop(); }
-
-let _replayFileInput: HTMLInputElement | null = null;
-function replayChooseFile() {
-  if (!_replayFileInput) {
-    _replayFileInput = document.createElement('input');
-    _replayFileInput.type = 'file';
-    _replayFileInput.accept = '.bin';
-    _replayFileInput.addEventListener('change', () => {
-      const f = _replayFileInput?.files?.[0];
-      if (f) replayCtrl.loadFile(f);
-    });
-  }
-  _replayFileInput.click();
-}
-
-function replayRun() {
-  if (replayState.value === 'ready' || replayState.value === 'paused') {
-    replayCtrl.play();
-  }
-}
-
-function replayPause() {
-  replayCtrl.pause();
-}
-
-function replayStepFwd() {
-  replayCtrl.stepForward();
-}
-
-function replayStepBack() {
-  replayCtrl.stepBackward();
-}
-
-function replayRestart() {
-  replayCtrl.replay();
-}
-
-function replayExit() {
-  replayCtrl.exit();
-}
 
 const {
   mcuLogs, imageFps, imageManager, serialManager,
@@ -511,45 +237,12 @@ const activeTab = ref(0);
 const settingsView = ref<InstanceType<typeof SettingsView>>();
 
 const cliOpen = ref(false);
-const cliHeight = ref(parseInt(localStorage.getItem("cliHeight") ?? "260"));
 
-function startCliResize(e: PointerEvent) {
-  e.preventDefault();
-  (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-  const startY = e.clientY, startH = cliHeight.value;
-  const onMove = (ev: PointerEvent) => {
-    ev.preventDefault();
-    cliHeight.value = Math.max(120, Math.min(window.innerHeight - 80, startH - (ev.clientY - startY)));
-  };
-  const onUp = () => {
-    localStorage.setItem("cliHeight", String(cliHeight.value));
-    window.removeEventListener("pointermove", onMove);
-    window.removeEventListener("pointerup", onUp);
-  };
-  window.addEventListener("pointermove", onMove, { passive: false });
-  window.addEventListener("pointerup", onUp);
-}
 const onKey = (e: KeyboardEvent) => {
   if (e.ctrlKey && e.key === "j") { e.preventDefault(); cliOpen.value = !cliOpen.value; }
 };
 
-const avatarOpen = ref(false);
-const mobileAvatarOpen = ref(false);
-
-// ── Avatar computed ──
 const isReplayActive = computed(() => replayState.value !== 'idle' && replayState.value !== 'loading');
-
-const avatarRingClass = computed(() => {
-  if (isReplayActive.value) return 'replay';
-  if (conn.connected) return 'online';
-  return 'offline';
-});
-
-const avatarText = computed(() => {
-  if (isReplayActive.value) return '▶';
-  if (conn.connected) return (conn.mcuName || 'MC').slice(0, 2).toUpperCase() + '.';
-  return 'TV';
-});
 
 const connectionStatus = computed<'offline' | 'live' | 'replay'>(() => {
   if (isReplayActive.value) return 'replay';
@@ -557,25 +250,8 @@ const connectionStatus = computed<'offline' | 'live' | 'replay'>(() => {
   return 'offline';
 });
 
-// ── Channels ──
-type ChannelId = 'usb_cdc' | 'uart' | 'wifi' | 'replay';
-const allChannels: { id: ChannelId; label: string; icon: string }[] = [
-  { id: 'usb_cdc', label: 'USB-CDC', icon: 'lucide:usb' },
-  { id: 'uart', label: 'UART', icon: 'lucide:cable' },
-  { id: 'wifi', label: 'WIFI', icon: 'lucide:wifi' },
-  { id: 'replay', label: 'Replay', icon: 'lucide:film' },
-];
-const activeChannel = ref<ChannelId>('usb_cdc');
-
-function replayStartFromPanel() {
-  if (replayState.value === 'ready') replayRun();
-}
 const now = ref(Date.now());
 let nowTimer: ReturnType<typeof setInterval> | null = null;
-const serialDraft = reactive({
-  baud: 115200,
-  wifiEndpoint: "192.168.4.1:8080",
-});
 const uptime = computed(() => {
   if (!conn.connectedAt) return "";
   const s = Math.floor((now.value - conn.connectedAt) / 1000);
@@ -583,22 +259,28 @@ const uptime = computed(() => {
   return h ? `${h}h ${m}m` : m ? `${m}m ${sec}s` : `${sec}s`;
 });
 
-async function connectActive() {
+const avatarRef = ref<InstanceType<typeof AvatarMenu>>();
+const avatarMobileRef = ref<InstanceType<typeof AvatarMenu>>();
+
+function closePopups() {
+  avatarRef.value?.closePopups();
+  avatarMobileRef.value?.closePopups();
+}
+
+async function connectActive(channel: string, baud: number, wifiEndpoint: string) {
   try {
-    if (activeChannel.value === "wifi") {
+    if (channel === "wifi") {
       conn.connected = true;
       conn.connectedAt = Date.now();
-      conn.mcuName = serialDraft.wifiEndpoint;
-      conn.portLabel = `WIFI ${serialDraft.wifiEndpoint}`;
+      conn.mcuName = wifiEndpoint;
+      conn.portLabel = `WIFI ${wifiEndpoint}`;
     } else {
       await serialManager.selectPort();
-      await serialManager.connect(serialDraft.baud);
-      conn.portLabel = activeChannel.value === "usb_cdc"
-        ? `USB-CDC ${serialDraft.baud}`
-        : `UART ${serialDraft.baud}`;
+      await serialManager.connect(baud);
+      conn.portLabel = channel === "usb_cdc"
+        ? `USB-CDC ${baud}`
+        : `UART ${baud}`;
     }
-    avatarOpen.value = false;
-    mobileAvatarOpen.value = false;
   } catch (error) {
     console.error("Connect failed:", error);
   }
@@ -739,144 +421,6 @@ onUnmounted(() => {
   background: var(--nav-tab-active);
   box-shadow: 0 10px 28px rgba(142, 155, 70, 0.18);
 }
-.avatar-wrap {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
-  position: relative;
-}
-
-/* ── Record float buttons ── */
-.rec-float {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.rec-circle {
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-radius: 999px;
-  background: rgba(239, 68, 68, 0.12);
-  color: #ef4444;
-  cursor: pointer;
-  transition: background 150ms, transform 120ms;
-}
-.rec-circle:hover { background: rgba(239, 68, 68, 0.22); }
-.rec-circle:active { transform: scale(0.93); }
-.rec-circle svg { width: 14px; height: 14px; }
-.rec-icon {
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-radius: 10px;
-  background: var(--surface);
-  color: var(--text);
-  cursor: pointer;
-  transition: background 150ms, color 150ms, transform 120ms;
-}
-.rec-icon svg { width: 16px; height: 16px; }
-.rec-icon:hover { background: var(--nav-tab-active); }
-.rec-icon:active { transform: scale(0.93); }
-.rec-icon.stop { color: #ef4444; }
-.rec-icon.stop:hover { background: rgba(239, 68, 68, 0.12); }
-
-/* slide-left transition */
-.slide-left-enter-active,
-.slide-left-leave-active { transition: all 220ms cubic-bezier(0.4, 0, 0.2, 1); }
-.slide-left-enter-from,
-.slide-left-leave-to { opacity: 0; transform: translateX(12px); }
-
-.avatar {
-  width: 38px;
-  height: 38px;
-  display: grid;
-  place-items: center;
-  border-radius: 999px;
-  background: var(--nav-tab-active);
-  font-weight: 900;
-  box-shadow: 0 12px 34px rgba(33, 58, 75, 0.12);
-  position: relative;
-  cursor: pointer;
-  transition: box-shadow 200ms;
-}
-.avatar.online  { box-shadow: 0 0 0 2.5px #22c55e, 0 12px 34px rgba(33,58,75,.12); }
-.avatar.offline { box-shadow: 0 0 0 2.5px #ef4444, 0 12px 34px rgba(33,58,75,.12); }
-.avatar.replay  { box-shadow: 0 0 0 2.5px #3b82f6, 0 12px 34px rgba(33,58,75,.12); }
-[data-theme="dark"] .avatar.online  { box-shadow: 0 0 0 2.5px #4ade80, 0 12px 34px rgba(0,0,0,.25); }
-[data-theme="dark"] .avatar.offline { box-shadow: 0 0 0 2.5px #f87171, 0 12px 34px rgba(0,0,0,.25); }
-[data-theme="dark"] .avatar.replay  { box-shadow: 0 0 0 2.5px #60a5fa, 0 12px 34px rgba(0,0,0,.25); }
-
-/* ── icon-only buttons ── */
-.icon-btn {
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-radius: 10px;
-  background: var(--surface);
-  color: var(--text);
-  cursor: pointer;
-  transition: background 150ms, color 150ms, transform 120ms;
-}
-.icon-btn svg { width: 16px; height: 16px; }
-.icon-btn:hover { background: var(--nav-tab-active); }
-.icon-btn:active { transform: scale(0.93); }
-.icon-btn.mute { color: var(--text-muted); background: transparent; }
-.icon-btn.mute:hover { background: var(--surface); }
-.icon-btn.danger { color: #ef4444; }
-.icon-btn.danger:hover { background: rgba(239,68,68,.12); }
-.icon-btn:disabled { opacity: 0.5; cursor: default; }
-
-.replay-file-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  padding-bottom: 4px;
-}
-.replay-file-row.dim    { color: var(--text-muted); }
-.replay-file-row.active { color: #22c55e; }
-[data-theme="dark"] .replay-file-row.active { color: #4ade80; }
-.replay-file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.replay-file-icon { width: 16px; height: 16px; flex-shrink: 0; }
-.replay-config {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.replay-transport {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  grid-column: 1 / -1;
-}
-.replay-speed {
-  width: 46px;
-  flex-shrink: 0;
-  border: 1px solid var(--card-border);
-  border-radius: 6px;
-  padding: 3px 3px;
-  background: var(--surface);
-  color: var(--text);
-  font-family: "JetBrains Mono", Consolas, monospace;
-  font-size: 10px;
-  font-weight: 700;
-  text-align: right;
-}
-.replay-speed:focus { outline: none; border-color: #20b8a6; }
-.replay-speed::-webkit-outer-spin-button,
-.replay-speed::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.replay-speed[type=number] { -moz-appearance: textfield; }
 
 /* ── 底部导航（移动端） ── */
 .bottom-nav {
@@ -937,26 +481,6 @@ onUnmounted(() => {
 .tab-label {
   font-size: 10px;
 }
-.avatar-m {
-  width: 34px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-  border-radius: 999px;
-  background: var(--nav-tab-active);
-  font-weight: 900;
-  font-size: 12px;
-  flex-shrink: 0;
-  position: relative;
-  cursor: pointer;
-}
-.avatar-m.online  { box-shadow: 0 0 0 2.5px #22c55e; }
-.avatar-m.offline { box-shadow: 0 0 0 2.5px #ef4444; }
-.avatar-m.replay  { box-shadow: 0 0 0 2.5px #3b82f6; }
-[data-theme="dark"] .avatar-m.online  { box-shadow: 0 0 0 2.5px #4ade80; }
-[data-theme="dark"] .avatar-m.offline { box-shadow: 0 0 0 2.5px #f87171; }
-[data-theme="dark"] .avatar-m.replay  { box-shadow: 0 0 0 2.5px #60a5fa; }
-
 .avatar-popup {
   position: absolute;
   top: calc(100% + 10px);
@@ -994,126 +518,6 @@ onUnmounted(() => {
   color: var(--text);
   white-space: nowrap;
 }
-.popup-status {
-  font-weight: 800;
-  font-size: 12px;
-  margin-bottom: 8px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  display: inline-block;
-}
-.popup-status.online  { background: rgba(34,197,94,.15); color: #16a34a; }
-.popup-status.offline { background: rgba(239,68,68,.15);  color: #dc2626; }
-.popup-status.replay  { background: rgba(59,130,246,.15); color: #2563eb; }
-[data-theme="dark"] .popup-status.online  { background: rgba(74,222,128,.15); color: #4ade80; }
-[data-theme="dark"] .popup-status.offline { background: rgba(248,113,113,.15); color: #f87171; }
-[data-theme="dark"] .popup-status.replay  { background: rgba(96,165,250,.15); color: #60a5fa; }
-.popup-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 3px 0;
-  color: var(--text-muted);
-}
-.popup-row b { color: var(--text); font-weight: 600; }
-.popup-hint { color: var(--text-muted); font-size: 12px; }
-.connection-popup {
-  min-width: 280px;
-  white-space: normal;
-}
-.connect-panel,
-.connected-panel {
-  display: grid;
-  gap: 10px;
-}
-.connect-panel {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-.connect-channel {
-  min-height: 58px;
-  display: grid;
-  place-items: center;
-  gap: 4px;
-  border: 1px solid var(--card-border);
-  border-radius: 12px;
-  background: var(--surface);
-  color: var(--text-muted);
-  font: inherit;
-  font-size: 11px;
-  font-weight: 900;
-  cursor: pointer;
-}
-.connect-channel svg {
-  font-size: 18px;
-}
-.connect-channel.active {
-  border-color: rgba(32, 184, 166, 0.55);
-  color: #0e8a7e;
-  background: rgba(32, 184, 166, 0.1);
-}
-.connect-detail {
-  grid-column: 1 / -1;
-  min-height: 38px;
-  display: flex;
-  align-items: center;
-  padding: 8px 10px;
-  border-radius: 12px;
-  background: var(--surface);
-  color: var(--text-muted);
-  font-size: 12px;
-  font-weight: 800;
-}
-.baud-strip {
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.baud-strip button {
-  border: 0;
-  border-radius: 999px;
-  padding: 5px 8px;
-  background: var(--card-bg);
-  color: var(--text-muted);
-  font-family: "JetBrains Mono", Consolas, monospace;
-  font-size: 11px;
-  font-weight: 900;
-  cursor: pointer;
-}
-.baud-strip button.active {
-  background: #20b8a6;
-  color: #fff;
-}
-.popup-input {
-  width: 100%;
-  border: 1px solid var(--card-border);
-  border-radius: 10px;
-  padding: 8px 10px;
-  background: var(--card-bg);
-  color: var(--text);
-  font-family: "JetBrains Mono", Consolas, monospace;
-  font-size: 12px;
-  font-weight: 800;
-}
-.popup-input:focus {
-  outline: none;
-  border-color: #20b8a6;
-}
-.popup-action {
-  grid-column: 1 / -1;
-  border: 0;
-  border-radius: 12px;
-  min-height: 36px;
-  background: var(--text);
-  color: var(--card-bg);
-  font-weight: 900;
-  cursor: pointer;
-}
-.popup-action.danger {
-  margin-top: 4px;
-  background: #ef4444;
-  color: #fff;
-}
-.popup-enter-active, .popup-leave-active { transition: opacity 150ms, transform 150ms; }
-.popup-enter-from, .popup-leave-to { opacity: 0; transform: translateY(-4px) scale(0.97); }
 .main {
   padding: 0 28px 72px;
 }
@@ -1481,83 +885,8 @@ h1 {
   }
 }
 
-/* ── CLI Panel ── */
 .logo {
   cursor: pointer;
   user-select: none;
-}
-.cli-panel {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 260px;
-  z-index: 400;
-  display: flex;
-  flex-direction: column;
-  background: var(--card-bg);
-  border-top: 1px solid var(--card-border);
-  backdrop-filter: blur(24px);
-  box-shadow: 0 -8px 40px rgba(0,0,0,.15);
-}
-.cli-resize-bar {
-  height: 5px;
-  cursor: ns-resize;
-  flex-shrink: 0;
-  background: transparent;
-  transition: background 150ms;
-  touch-action: none;
-  position: relative;
-}
-.cli-resize-bar::before {
-  content: '';
-  position: absolute;
-  inset: -10px 0;
-}
-.cli-resize-bar:hover { background: var(--surface); }
-.cli-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 16px;
-  height: 36px;
-  border-bottom: 1px solid var(--card-border);
-  flex-shrink: 0;
-}
-.cli-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-muted);
-  letter-spacing: 0.05em;
-}
-.cli-close {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--text-muted);
-  display: grid;
-  place-items: center;
-  padding: 4px;
-  border-radius: 6px;
-  transition: background 150ms, color 150ms;
-}
-.cli-close:hover { background: var(--surface); color: var(--text); }
-.cli-body {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
-  color: var(--text-dim);
-  font-family: "JetBrains Mono", "Fira Code", monospace;
-}
-.cli-enter-active, .cli-leave-active { transition: transform 220ms cubic-bezier(0.4,0,0.2,1); }
-.cli-enter-from, .cli-leave-to { transform: translateY(100%); }
-
-@media (max-width: 640px) {
-  .cli-panel { height: 220px; bottom: 64px; }
 }
 </style>
