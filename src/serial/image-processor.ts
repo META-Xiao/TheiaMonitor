@@ -62,8 +62,8 @@ export class ImageFrameProcessor {
       );
     }
 
-    // 3. 缓存 I 帧（RAW codec 的帧作为参考帧）
-    if (codec === Codec.RAW) {
+    // 3. 缓存参考帧（RAW 和 Tile 的 decoded raw 都作为后续 P 帧的参考）
+    if (codec === Codec.RAW || codec === Codec.Tile) {
       this.iFrameCache = raw;
     }
 
@@ -93,6 +93,13 @@ export class ImageFrameProcessor {
     if (codec === Codec.HEATSHRINK) {
       const expectedSize = this.expectedRawSize(pixelFormat, width, height);
       return heatshrinkDecode(payload, expectedSize, 8, 4);
+    }
+    if (codec === Codec.Tile) {
+      if (!this.iFrameCache) {
+        throw new Error('Tile P-frame received without I-frame cache');
+      }
+      const expectedSize = this.expectedRawSize(pixelFormat, width, height);
+      return tileDecode(payload, this.iFrameCache, expectedSize, pixelFormat, width, height);
     }
     throw new Error(`Codec ${Codec[codec]} (${codec}) not yet implemented`);
   }
@@ -363,6 +370,45 @@ class BitReader {
 }
 
 const HSE_MIN_MATCH = 2;
+
+// ── Tile decoder ──────────────────────────────────────────────────
+
+function tileDecode(
+  payload: Uint8Array,
+  iFrameCache: Uint8Array,
+  expectedSize: number,
+  pixelFormat: PixelFormat,
+  width: number,
+  height: number,
+): Uint8Array {
+  let off = 0;
+  const sum = payload[off++];
+  const cutInfo = payload[off++];
+  const gridH = (cutInfo >> 4) & 0xF;
+  const gridW = cutInfo & 0xF;
+  const blockW = Math.floor(width / gridW);
+  const blockH = Math.floor(height / gridH);
+  const bpp = pixelFormat === PixelFormat.RGB565 ? 2 : 1;
+  const blockBytes = blockW * blockH * bpp;
+  const rowStride = width * bpp;
+
+  // Copy I-frame cache as base, then patch changed blocks
+  const output = new Uint8Array(iFrameCache);
+
+  for (let i = 0; i < sum; i++) {
+    const blockId = payload[off++];
+    const blockRow = Math.floor(blockId / gridW);
+    const blockCol = blockId % gridW;
+
+    for (let r = 0; r < blockH; r++) {
+      const srcOff = off;
+      const dstOff = (blockRow * blockH + r) * rowStride + blockCol * blockW * bpp;
+      output.set(payload.subarray(srcOff, srcOff + blockW * bpp), dstOff);
+      off += blockW * bpp;
+    }
+  }
+  return output;
+}
 
 function heatshrinkDecode(
   payload: Uint8Array,
