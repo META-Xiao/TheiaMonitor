@@ -82,7 +82,7 @@ serialManager.on((event) => {
 });
 
 imageManager.on((event) => {
-  if (event.type === 'STATS_UPDATED') imageFps.value = Math.round(event.stats.currentFps);
+  if (event.type === 'STATS_UPDATED') imageFps.value = event.stats.currentFps;
 });
 logManager.on((event) => {
   if (event.type !== 'LOG_RECEIVED') return;

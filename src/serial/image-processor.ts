@@ -75,7 +75,7 @@ export class ImageFrameProcessor {
       width,
       height,
       pixelData,
-      timestamp: Date.now(),
+      timestamp: performance.now(),
     };
 
     this.lastProcessedFrame = processed;
@@ -90,6 +90,10 @@ export class ImageFrameProcessor {
     width: number,
     height: number,
   ): Uint8Array {
+    if (codec === Codec.RLE) {
+      const expectedSize = this.expectedRawSize(pixelFormat, width, height);
+      return rleDecode(payload, expectedSize);
+    }
     if (codec === Codec.HEATSHRINK) {
       const expectedSize = this.expectedRawSize(pixelFormat, width, height);
       return heatshrinkDecode(payload, expectedSize, 8, 4);
@@ -227,7 +231,8 @@ export class ImageDataStore {
   private droppedFrames: number = 0;
   private lastFrameId: number = -1;
   private frameTimeHistory: number[] = [];
-  private readonly maxHistorySize: number = 60; // 保留最近60帧的时间戳
+  private readonly FPS_WINDOW_MS = 2000;       // 2 秒时间窗口
+  private readonly maxHistorySize: number = 120; // 硬上限（防止高频时内存增长）
 
   constructor(maxBufferSize: number = 2) {
     this.maxBufferSize = maxBufferSize;
@@ -258,9 +263,17 @@ export class ImageDataStore {
       this.frameBuffer.delete(oldestKey);
     }
 
-    // 记录帧时间戳用于FPS计算
+    // 记录帧时间戳，并按时间窗口清理旧数据
     this.frameTimeHistory.push(frame.timestamp);
-    if (this.frameTimeHistory.length > this.maxHistorySize) {
+
+    // 清理超过 2 秒窗口的旧时间戳
+    const cutoff = frame.timestamp - this.FPS_WINDOW_MS;
+    while (this.frameTimeHistory.length > 0 && this.frameTimeHistory[0] < cutoff) {
+      this.frameTimeHistory.shift();
+    }
+
+    // 硬上限保护
+    while (this.frameTimeHistory.length > this.maxHistorySize) {
       this.frameTimeHistory.shift();
     }
   }
@@ -280,22 +293,31 @@ export class ImageDataStore {
   }
 
   /**
-   * 计算实时FPS（基于最近帧的时间戳）
+   * 计算实时FPS（基于最近 2 秒时间窗口内的帧数）
+   *
+   * 使用 performance.now() 作为窗口右边界，而非最新帧的时间戳。
+   * 这样即使帧到达存在突发/间隔，FPS 仍然反映真实的 wall-clock 吞吐率。
    */
   calculateFps(): number {
+    // 清理可能残留的过期条目（以防长时间没有新帧）
+    const now = performance.now();
+    const cutoff = now - this.FPS_WINDOW_MS;
+    while (this.frameTimeHistory.length > 0 && this.frameTimeHistory[0] < cutoff) {
+      this.frameTimeHistory.shift();
+    }
+
     if (this.frameTimeHistory.length < 2) {
       return 0;
     }
 
     const oldestTime = this.frameTimeHistory[0];
-    const newestTime = this.frameTimeHistory[this.frameTimeHistory.length - 1];
-    const timeDelta = newestTime - oldestTime;
+    const timeDelta = now - oldestTime;
 
-    if (timeDelta === 0) {
+    if (timeDelta <= 0) {
       return 0;
     }
 
-    return (this.frameTimeHistory.length - 1) / (timeDelta / 1000);
+    return (this.frameTimeHistory.length - 1) * 1000 / timeDelta;
   }
 
   /**
@@ -376,6 +398,21 @@ class BitReader {
 }
 
 const HSE_MIN_MATCH = 2;
+
+// ── RLE decoder ───────────────────────────────────────────────────
+
+function rleDecode(payload: Uint8Array, expectedSize: number): Uint8Array {
+  const output = new Uint8Array(expectedSize);
+  let outPos = 0;
+  for (let i = 0; i < payload.length && outPos < expectedSize; i += 2) {
+    const val = payload[i];
+    const cnt = payload[i + 1];
+    const end = Math.min(outPos + cnt, expectedSize);
+    for (let j = outPos; j < end; j++) output[j] = val;
+    outPos = end;
+  }
+  return output;
+}
 
 // ── Patch decoder ─────────────────────────────────────────────────
 
