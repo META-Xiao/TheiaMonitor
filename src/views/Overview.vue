@@ -72,8 +72,8 @@
             </aside>
           </section>
 
-          <section class="pc-log-card">
-            <LogCard title="Host RX / Boot Log" :logs="hostLogs" :status="connectionStatus" />
+          <section class="binout-card">
+            <BinOutput ref="binOutputRef" :status="connectionStatus" />
           </section>
         </div>
 
@@ -130,6 +130,7 @@ import LogCard from "../components/LogCard.vue";
 import AvatarMenu from "../components/AvatarMenu.vue";
 import CliPanel from "../components/CliPanel.vue";
 import VisionPane from "../components/VisionPane.vue";
+import BinOutput from "../components/BinOutput.vue";
 import SensorCard from "../components/SensorCard.vue";
 import ServoCard from "../components/ServoCard.vue";
 import { useCanvasAnimation } from "../composables/useCanvasAnimation";
@@ -324,13 +325,14 @@ function drawNoSignal() {
   ctx.fillText('No Signal', c.width / 2, c.height / 2);
 }
 
-const hostLogs = ref([
-  "[HOST 00:00:00] Trace Vector PC Host started",
-  "[HOST 00:00:01] serial manager ready",
-  "[HOST 00:00:02] protocol parser initialized",
-  "[HOST 00:00:03] resource monitor mounted",
-  "[HOST 00:00:04] image stream waiting for frame",
-]);
+console.log('[HOST] Trace Vector PC Host started');
+console.log('[HOST] serial manager ready');
+console.log('[HOST] protocol parser initialized');
+console.log('[HOST] resource monitor mounted');
+console.log('[HOST] image stream waiting for frame');
+
+const binOutputRef = ref<InstanceType<typeof BinOutput>>();
+let unsubRaw: (() => void) | null = null;
 
 onMounted(() => {
   window.addEventListener("keydown", onKey);
@@ -350,12 +352,16 @@ onMounted(() => {
     c.height = height;
     ctx.putImageData(new ImageData(new Uint8ClampedArray(pixelData.buffer as ArrayBuffer), width, height), 0, 0);
   });
+  unsubRaw = serialManager.onRawData((data) => {
+    binOutputRef.value?.pushRawData(data);
+  });
 });
 onUnmounted(() => {
   window.removeEventListener("keydown", onKey);
   if (nowTimer) clearInterval(nowTimer);
   stopAnim();
   unsubImage?.();
+  unsubRaw?.();
 });
 </script>
 
@@ -500,8 +506,7 @@ h1 {
   display: grid;
   gap: 24px;
 }
-.telemetry-card,
-.pc-log-card {
+.telemetry-card {
   background: var(--card-bg);
   border: 1px solid var(--card-border);
   box-shadow: var(--card-shadow);
@@ -611,17 +616,6 @@ h1 {
   min-height: 0;
   max-height: 524px;
 }
-.pc-log-card {
-  border-radius: 24px;
-  padding: 18px;
-  max-height: 220px;
-  display: flex;
-  flex-direction: column;
-  margin-bottom: 24px;
-}
-.pc-logs {
-  max-height: 170px;
-}
 .empty {
   min-height: calc(100vh - 68px);
   display: grid;
@@ -677,9 +671,6 @@ h1 {
   .mcu-card {
     height: auto;
   }
-  .pc-log-card {
-    width: auto;
-  }
 }
 
 @media (max-width: 760px) {
@@ -700,9 +691,6 @@ h1 {
   }
   .telemetry-card {
     padding: 12px;
-  }
-  .pc-log-card {
-    width: auto;
   }
 }
 
