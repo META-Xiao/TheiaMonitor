@@ -1,13 +1,14 @@
 # Trace-Vector-PChost
 
-针对21届智能车雁过留痕组 STC32G144K 调试专用上位机。使用混合编码和 WebSerial API 与 STC32G144K 智能车进行串口通信。
+原为[我队21届智能车竞赛所适配](https://github.com/META-Xiao/Trace-Vector)上位机，在开发的过程中对其进行大幅扩展，目前可以支持市面上常见的MCU作为上位机debug
 
 ## 功能特性
 
-- **图传显示** — 实时显示 188×120 摄像头画面，支持截图/录制
-- **日志输出** — MCU DEBUG 日志实时显示
-- **资源监控** — CPU/RAM/ROM 占用率、速度、舵机角度折线图
-- **命令发送** — 向 MCU 发送控制指令（CLI，开发中）
+- **图传显示**： 实时显示MCU输出的图像数据，支持多种格式（二值图、灰度、RGB565等）以及对应的压缩编码方式（LZ、Tile、Patch等）
+- **日志输出**： MCU DEBUG 日志实时显示
+- **资源监控**： 可扩展的资源数据输出，并在上位机可视化显示，默认支持CPU/RAM/ROM 占用率、速度等折线图
+- **录制和回放**： 通过经行编码的bin文件直接保存MCU输出的数据，以及支持对该数据进行读取（回放）  
+- **命令发送**： 向 MCU 发送控制指令（CLI，开发中）
 
 ## 协议规范
 
@@ -67,18 +68,19 @@ npm run build  # 构建
 - [x] 主仪表板 UI（Overview / Vision / Settings，响应式）
 - [x] 截图 / 录制功能
 - [x] `useTelemetry` composable（串口+数据管理统一入口）
-- [ ] CLI 命令发送面板
-- [ ] 图传 Canvas 直接渲染（当前为 mirror 模式）
-- [ ] Settings 功能实际生效（Channels 开关、Display 设置）
+- [x] 图传 Canvas 直接渲染（当前为 mirror 模式）
+- [x] CLI 命令发送面板
+- [x] Settings 功能实际生效（Channels 开关、Display 设置）
+- [x] 录制和回放功能（bin 文件直接读写）
 
 ## TODO
 
-- [ ] **实体 MCU 联调测试** — 用真实 STC32G144K 硬件验证三路帧收发、FPS、资源数据准确性；确认波特率 115200 稳定性
-- [ ] **CLI 命令发送** — 实现向 MCU 发送控制指令（对应固件 `value_change` / `get_button_state`）
-- [ ] **图传直接渲染** — 将 `ImageProcessManager` 的 RGBA 数据直接写入 Vision Canvas，替换当前 mirror 方案，解锁真实 FPS 显示
-- [ ] **Settings Channels 开关接入** — 三路帧订阅（0xCC/0xDD/0xEE）响应 Settings 页面开关
-- [ ] **Manager API 统一** — `ImageProcessManager` 改为 `attach/detach` 模式，与 `ResourceManager` 一致
-- [ ] **examples.ts 整理** — 将 `*-examples.ts` 移至 `__tests__/fixtures/`
+- [ ] **Hex 查看器**：这个页面将替代现有的vision界面（vision界面看起来多余了）
+  - [ ] 打开已有 .bin 文件进行离线查看
+  - [ ] Hex 查看器：类似 Hex Editor，按字节显示二进制数据
+  - [ ] 不同帧类型（0xCC/0xDD/0xEE）用不同颜色高亮
+  - [ ] 每帧内分块标注：Header（帧头+长度+帧号）、Data（图像/日志/资源数据）、Checksum
+  - [ ] 鼠标悬停显示字段名称和数值解析
 
 ## 文档
 
