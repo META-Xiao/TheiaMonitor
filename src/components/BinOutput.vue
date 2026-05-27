@@ -1,5 +1,5 @@
 <template>
-  <div class="bin-output">
+  <div class="bin-output" :style="props.status === 'live' ? { maxHeight: 'none' } : undefined">
     <div class="bin-head">
       <span>MCU Binout</span>
       <span class="bin-legend">
@@ -7,13 +7,24 @@
         <span class="legend-dot dd" />0xDD Log
         <span class="legend-dot ee" />0xEE Resource
       </span>
+      <button
+        class="ctrl-btn"
+        :class="{ on: autoScroll }"
+        @click="autoScroll = !autoScroll"
+        title="Auto-scroll"
+      >
+        <Icon icon="lucide:arrow-down-to-line" />
+      </button>
+      <button class="ctrl-btn" @click="clearOutput" title="Clear">
+        <Icon icon="lucide:trash-2" />
+      </button>
       <em :class="status">{{ statusText }}</em>
     </div>
-    <div class="bin-body">
-      <div v-if="!chunks.length" class="bin-empty">Waiting for data...</div>
+    <div ref="bodyEl" class="bin-body">
+      <div v-if="!displays.length" class="bin-empty">Waiting for data...</div>
       <div
-        v-for="(chunk, ci) in visibleChunks"
-        :key="ci"
+        v-for="chunk in displays"
+        :key="chunk.id"
         class="bin-chunk"
       >
         <div class="chunk-header" :class="chunkHeaderClass(chunk)">
@@ -49,11 +60,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onUnmounted, ref, shallowRef } from 'vue';
+import { computed, nextTick, onUnmounted, ref, shallowRef, watch } from 'vue';
+import { Icon } from '@iconify/vue';
 
 interface Chunk {
   bytes: Uint8Array;
-  type: number; // 0xCC, 0xDD, 0xEE, or 0 for unrecognized
+  type: number;
+  id: number;
 }
 
 interface LineInfo {
@@ -73,37 +86,47 @@ const statusText = computed(() => {
   return 'OFFLINE';
 });
 
-// ── Chunk buffer (batched via rAF to avoid blocking vision stream) ──
+// ── Chunk buffer (batched via rAF) ──
 const chunks = shallowRef<Chunk[]>([]);
 const displays = shallowRef<ChunkDisplay[]>([]);
-const MAX_CHUNKS = 32;
 
 let pending: Uint8Array[] = [];
 let rafId = 0;
+let nextId = 0;
+
+const autoScroll = ref(true);
+const bodyEl = ref<HTMLElement>();
 
 function flush() {
   rafId = 0;
   if (!pending.length) return;
 
-  // Merge pending data into chunks in one batch
   const batch = pending;
   pending = [];
-  const newChunks = batch.map(data => {
+  const newChunks: Chunk[] = batch.map(data => {
     const type = classifyFrame(data);
-    return { bytes: data, type } as Chunk;
+    return { bytes: data, type, id: nextId++ };
   });
 
-  const cur = chunks.value;
-  const merged = [...cur, ...newChunks].slice(-MAX_CHUNKS);
-  chunks.value = merged;
-
-  // Only rebuild displays for chunks that are actually new or changed
-  const startIdx = Math.max(0, merged.length - newChunks.length);
-  const rebuilt = displays.value.slice(0, startIdx);
-  for (let i = startIdx; i < merged.length; i++) {
-    rebuilt.push(buildChunkDisplay(merged[i]));
+  if (props.status === 'live') {
+    // Live: replace with latest frame only
+    const latest = newChunks[newChunks.length - 1];
+    chunks.value = [latest];
+    displays.value = [buildChunkDisplay(latest)];
+  } else {
+    // Replay / offline: accumulate all
+    chunks.value = [...chunks.value, ...newChunks];
+    const rebuilt = [...displays.value];
+    for (const nc of newChunks) {
+      rebuilt.push(buildChunkDisplay(nc));
+    }
+    displays.value = rebuilt;
   }
-  displays.value = rebuilt;
+}
+
+function clearOutput() {
+  chunks.value = [];
+  displays.value = [];
 }
 
 function pushRawData(data: Uint8Array) {
@@ -117,6 +140,18 @@ onUnmounted(() => {
   if (rafId) cancelAnimationFrame(rafId);
 });
 
+watch(
+  () => displays.value.length,
+  () => {
+    if (autoScroll.value) {
+      nextTick(() => {
+        const el = bodyEl.value;
+        if (el) el.scrollTop = el.scrollHeight;
+      });
+    }
+  },
+);
+
 function classifyFrame(data: Uint8Array): number {
   for (let i = 0; i < Math.min(data.length, 32); i++) {
     const b = data[i];
@@ -127,6 +162,7 @@ function classifyFrame(data: Uint8Array): number {
 
 // ── Build lines for each chunk ──
 interface ChunkDisplay {
+  id: number;
   bytes: Uint8Array;
   type: number;
   frameNum: number;
@@ -140,24 +176,19 @@ interface ChunkDisplay {
 function buildChunkDisplay(c: Chunk): ChunkDisplay {
   const bytes = c.bytes;
   const lines: LineInfo[] = [];
-  let headerEnd = 0;
 
-  // Simple frame structure guess:
-  // Byte 0: sync (0xCC/0xDD/0xEE)
-  // Byte 1-3: frame length (LE)
-  // Byte 4-5: frame number (LE)
-  // Remaining bytes: data + optional checksum at end
   const sync = bytes[0];
   let frameLen = 0;
   let frameNum = 0;
   let checksumOffset = -1;
+  let headerEnd = 0;
 
   if (bytes.length >= 6 && (sync === 0xCC || sync === 0xDD || sync === 0xEE)) {
     frameLen = bytes[1] | (bytes[2] << 8) | (bytes[3] << 16);
     frameNum = bytes[4] | (bytes[5] << 8);
     headerEnd = 6;
     if (bytes.length >= frameLen + 1 && frameLen > 0) {
-      checksumOffset = frameLen; // checksum at end of frame data
+      checksumOffset = frameLen;
     }
   }
 
@@ -176,7 +207,6 @@ function buildChunkDisplay(c: Chunk): ChunkDisplay {
       lineBytes.push({ offset: absOff, value: val });
       ascii += (val >= 0x20 && val < 0x7f) ? String.fromCharCode(val) : '.';
 
-      // Tooltip for known fields
       if (absOff === 0 && (val === 0xCC || val === 0xDD || val === 0xEE)) {
         tooltips.push({ offset: absOff, label: 'Sync', value: `0x${val.toString(16).toUpperCase()} (${syncLabel(val)})` });
       } else if (absOff >= 1 && absOff <= 3 && sync !== 0) {
@@ -192,6 +222,7 @@ function buildChunkDisplay(c: Chunk): ChunkDisplay {
   }
 
   return {
+    id: c.id,
     bytes,
     type: sync,
     frameNum,
@@ -209,13 +240,6 @@ function syncLabel(b: number): string {
   if (b === 0xEE) return 'Resource';
   return 'Unknown';
 }
-
-// ── Display: show last N chunks ──
-const VISIBLE_WINDOW = 6;
-
-const visibleChunks = computed(() => {
-  return displays.value.slice(-VISIBLE_WINDOW);
-});
 
 // ── Styling helpers ──
 function chunkHeaderClass(c: ChunkDisplay): string {
@@ -262,7 +286,7 @@ function hex(n: number, w: number): string {
 // ── Tooltip ──
 const hoveredLine = ref<LineInfo | null>(null);
 
-defineExpose({ pushRawData });
+defineExpose({ pushRawData, clearOutput });
 </script>
 
 <style scoped>
@@ -322,6 +346,24 @@ defineExpose({ pushRawData });
 .legend-dot.cc { background: #6366f1; }
 .legend-dot.dd { background: #f59e0b; }
 .legend-dot.ee { background: #22c55e; }
+
+.ctrl-btn {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 150ms, color 150ms, border-color 150ms;
+  flex-shrink: 0;
+}
+.ctrl-btn:hover { background: var(--surface); color: var(--text); }
+.ctrl-btn.on { background: rgba(32,184,166,.15); color: #20b8a6; border-color: rgba(32,184,166,.3); }
+[data-theme="dark"] .ctrl-btn.on { background: rgba(74,222,128,.15); color: #4ade80; border-color: rgba(74,222,128,.3); }
 
 .bin-body {
   flex: 1;

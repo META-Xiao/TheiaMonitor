@@ -68,7 +68,7 @@
             </section>
 
             <aside class="mcu-card">
-              <LogCard title="MCU output" :logs="mcuLogs" :status="connectionStatus" />
+              <LogCard title="MCU output" :logs="mcuLogs" :status="connectionStatus" @clear="mcuLogs.length = 0" />
             </aside>
           </section>
 

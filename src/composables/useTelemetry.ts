@@ -86,7 +86,7 @@ imageManager.on((event) => {
 });
 logManager.on((event) => {
   if (event.type !== 'LOG_RECEIVED') return;
-  mcuLogs.value = [...mcuLogs.value.slice(-19), event.entry.text];
+  mcuLogs.value = [...mcuLogs.value, event.entry.text];
 });
 
 export function useTelemetry() {
