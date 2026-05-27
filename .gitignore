@@ -43,3 +43,8 @@ android/build/
 android/.gradle/
 android/app/build/
 android/local.properties
+
+# 测试文件
+simulation/
+Leonardo/
+
