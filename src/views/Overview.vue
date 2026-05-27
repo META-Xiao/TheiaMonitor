@@ -77,24 +77,14 @@
           </section>
         </div>
 
-        <section class="vision-pane">
-          <div class="pane-head">
-            <span>Vision stream</span><b>{{ imageFps > 0 ? imageFps.toFixed(1) + ' FPS' : '-- FPS' }}</b>
-          </div>
-          <div class="canvas-wrap">
-            <canvas ref="imageCanvas" width="188" height="120" />
-          </div>
-          <div class="vision-foot">
-            <span>{{ imageSize.w > 0 ? `Source ${imageSize.w}×${imageSize.h}` : 'Source --×--' }}</span><span>--</span>
-          </div>
-        </section>
+        <VisionPane ref="visionPaneRef" :fps="imageFps" :image-size="imageSize" />
       </section>
     </main>
 
     <SettingsView ref="settingsView" v-show="activeTab === 2" />
     <VisionView
       v-show="activeTab === 1"
-      :canvas-ref="imageCanvas"
+      :canvas-ref="visionPaneRef?.canvas"
     />
 
     <!-- 移动端底部导航 -->
@@ -139,6 +129,7 @@ import VisionView from "./VisionView.vue";
 import LogCard from "../components/LogCard.vue";
 import AvatarMenu from "../components/AvatarMenu.vue";
 import CliPanel from "../components/CliPanel.vue";
+import VisionPane from "../components/VisionPane.vue";
 import SensorCard from "../components/SensorCard.vue";
 import ServoCard from "../components/ServoCard.vue";
 import { useCanvasAnimation } from "../composables/useCanvasAnimation";
@@ -314,6 +305,7 @@ const onBottomTab = (i: number) => {
   }
 };
 
+const visionPaneRef = ref<InstanceType<typeof VisionPane>>();
 const imageCanvas = ref<HTMLCanvasElement>();
 const { stop: stopAnim } = useCanvasAnimation(imageCanvas);
 const imageSize = ref({ w: 0, h: 0 });
@@ -343,9 +335,11 @@ const hostLogs = ref([
 onMounted(() => {
   window.addEventListener("keydown", onKey);
   nowTimer = setInterval(() => { now.value = Date.now(); }, 1000);
+  imageCanvas.value = visionPaneRef.value?.canvas;
   drawNoSignal();
   unsubImage = imageManager.on((event) => {
     if (event.type !== 'IMAGE_RECEIVED') return;
+    if (visionPaneRef.value?.isPaused) return;
     stopAnim();
     const c = imageCanvas.value;
     const ctx = c?.getContext('2d');
@@ -481,43 +475,6 @@ onUnmounted(() => {
 .tab-label {
   font-size: 10px;
 }
-.avatar-popup {
-  position: absolute;
-  top: calc(100% + 10px);
-  right: 0;
-  min-width: 180px;
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: 14px;
-  box-shadow: var(--card-shadow);
-  backdrop-filter: blur(20px);
-  padding: 12px 14px;
-  z-index: 300;
-  font-size: 13px;
-  color: var(--text);
-  white-space: nowrap;
-}
-.avatar-popup-m {
-  right: 0;
-  bottom: calc(100% + 10px);
-  top: auto;
-}
-.avatar-popup-m-fixed {
-  position: fixed;
-  bottom: 74px;
-  right: 16px;
-  min-width: 180px;
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: 14px;
-  box-shadow: var(--card-shadow);
-  backdrop-filter: blur(20px);
-  padding: 12px 14px;
-  z-index: 500;
-  font-size: 13px;
-  color: var(--text);
-  white-space: nowrap;
-}
 .main {
   padding: 0 28px 72px;
 }
@@ -544,8 +501,7 @@ h1 {
   gap: 24px;
 }
 .telemetry-card,
-.pc-log-card,
-.vision-pane {
+.pc-log-card {
   background: var(--card-bg);
   border: 1px solid var(--card-border);
   box-shadow: var(--card-shadow);
@@ -655,52 +611,6 @@ h1 {
   min-height: 0;
   max-height: 524px;
 }
-.vision-pane {
-  position: relative;
-  min-width: 0;
-  height: 720px;
-  border-radius: 26px;
-  overflow: hidden;
-}
-.pane-head,
-.vision-foot {
-  position: absolute;
-  z-index: 2;
-  left: 16px;
-  right: 16px;
-  display: flex;
-  justify-content: space-between;
-  color: var(--text-muted);
-  font-size: 12px;
-  font-weight: 900;
-}
-.pane-head {
-  top: 14px;
-}
-.vision-foot {
-  bottom: 12px;
-}
-.canvas-wrap {
-  position: absolute;
-  inset: 58px 42px 48px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background:
-    linear-gradient(rgba(36, 36, 36, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(36, 36, 36, 0.04) 1px, transparent 1px);
-  background-size: 24px 24px;
-  border-radius: 32px;
-  overflow: hidden;
-}
-.canvas-wrap canvas {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  image-rendering: pixelated;
-  border-radius: 20px;
-  filter: saturate(0.95);
-}
 .pc-log-card {
   border-radius: 24px;
   padding: 18px;
@@ -767,9 +677,6 @@ h1 {
   .mcu-card {
     height: auto;
   }
-  .vision-pane {
-    height: 420px;
-  }
   .pc-log-card {
     width: auto;
   }
@@ -793,9 +700,6 @@ h1 {
   }
   .telemetry-card {
     padding: 12px;
-  }
-  .vision-pane {
-    height: 320px;
   }
   .pc-log-card {
     width: auto;
@@ -876,7 +780,6 @@ h1 {
     max-height: 120px;
     margin-top: 0;
   }
-  .vision-pane,
   .mcu-card {
     height: 280px;
   }

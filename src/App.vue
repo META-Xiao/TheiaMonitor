@@ -1,9 +1,9 @@
 <template>
-  <TelemetryDashboard />
+  <Overview />
 </template>
 
 <script setup lang="ts">
-import TelemetryDashboard from './views/TelemetryDashboard.vue'
+import Overview from './views/Overview.vue'
 </script>
 
 <style>

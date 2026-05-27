@@ -272,4 +272,18 @@ defineExpose({
 [data-theme="dark"] .avatar-m.online  { box-shadow: 0 0 0 2.5px #4ade80; }
 [data-theme="dark"] .avatar-m.offline { box-shadow: 0 0 0 2.5px #f87171; }
 [data-theme="dark"] .avatar-m.replay  { box-shadow: 0 0 0 2.5px #60a5fa; }
+
+/* ── Popup positioning ── */
+.avatar-popup {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 300;
+}
+.avatar-popup-m-fixed {
+  position: fixed;
+  bottom: 74px;
+  right: 16px;
+  z-index: 500;
+}
 </style>
