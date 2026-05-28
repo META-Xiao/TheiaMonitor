@@ -33,7 +33,8 @@ export class ReplayController {
   private _state: ReplayState = 'idle';
   private _fileName = '';
   private _currentIdx = 0;
-  private _playTimer: ReturnType<typeof setTimeout> | null = null;
+  private _playTimer: ReturnType<typeof setInterval> | null = null;
+  private _nextFrameTime = 0;
   private _speed = 1.0;
 
   /** 每帧对应的 delta 时间（ms），与 frames 一一对应 */
@@ -80,7 +81,8 @@ export class ReplayController {
     if (this._state !== 'ready' && this._state !== 'paused') return;
     this._state = 'playing';
     this.events.onStateChange?.('playing');
-    this._tick();
+    this._nextFrameTime = performance.now();
+    this._playTimer = setInterval(() => this._tick(), 0);
   }
 
   /** 暂停 */
@@ -89,7 +91,7 @@ export class ReplayController {
     this._state = 'paused';
     this.events.onStateChange?.('paused');
     if (this._playTimer !== null) {
-      clearTimeout(this._playTimer);
+      clearInterval(this._playTimer);
       this._playTimer = null;
     }
   }
@@ -195,35 +197,31 @@ export class ReplayController {
   private _tick(): void {
     if (this._state !== 'playing') return;
 
-    // 在一个 tick 内连续发送属于同一时刻（delta=0）的帧
-    // 遇到 delta > 0 的帧时停止，等待对应时间后再发送
-    const BATCH = 20;
-    let sent = 0;
+    // setInterval polling avoids Chrome's 4ms setTimeout nesting clamp.
+    const now = performance.now();
+    if (now < this._nextFrameTime) return;
 
-    while (this._currentIdx < this.frames.length && sent < BATCH) {
-      const f = this.frames[this._currentIdx];
-
-      // 遇到有等待时间的帧，如果已经发过帧了，停下来等
-      if (sent > 0 && (this._deltas[this._currentIdx] ?? 0) > 0) break;
-
-      // IMAGE 帧较大，单独发送给 UI 渲染留时间
-      if (f.type === 'IMAGE' && sent > 0) break;
-
+    // Emit the entire chunk: all frames that arrived in the same USB packet.
+    // Only the first frame of a chunk carries the inter-chunk delta;
+    // subsequent frames have delta=0 (same absTime in _parse).
+    do {
       this._emitFrame(this._currentIdx);
       this._currentIdx++;
-      sent++;
-    }
+    } while (
+      this._currentIdx < this.frames.length &&
+      (this._deltas[this._currentIdx] ?? 0) === 0
+    );
 
     this.events.onProgress?.(this._currentIdx, this.frames.length);
 
     if (this._currentIdx >= this.frames.length) {
       this._onFinished();
-    } else {
-      const delta = this._deltas[this._currentIdx] ?? 0;
-      // 至少等 1ms，让浏览器有时间渲染
-      const delay = Math.max(delta, 1) / this._speed;
-      this._playTimer = setTimeout(() => this._tick(), delay);
+      return;
     }
+
+    // Wait exactly the recorded inter-chunk interval
+    const delta = this._deltas[this._currentIdx] ?? 0;
+    this._nextFrameTime += (delta / this._speed) || 0;
   }
 
   private _emitFrame(idx: number): void {
@@ -236,7 +234,7 @@ export class ReplayController {
     this._state = 'finished';
     this.events.onStateChange?.('finished');
     if (this._playTimer !== null) {
-      clearTimeout(this._playTimer);
+      clearInterval(this._playTimer);
       this._playTimer = null;
     }
   }
