@@ -12,11 +12,11 @@
 
 ## 功能特性
 
-- **图传显示**： 实时显示MCU输出的图像数据，支持多种格式（二值图、灰度、RGB565等）以及对应的压缩编码方式（LZ、Tile、Patch等）
+- **图传显示**： 实时显示 MCU 图像数据，支持 Binary1 / Gray8 / RGB565 / RGB888 / YUV422，编码 RAW / RLE / HeatShrink / Tile / Patch
 - **日志输出**： MCU DEBUG 日志实时显示
 - **资源监控**： 可扩展的资源数据输出，并在上位机可视化显示，默认支持CPU/RAM/ROM 占用率、速度等折线图
-- **录制和回放**： 通过经行编码的bin文件直接保存MCU输出的数据，以及支持对该数据进行读取（回放）  
-- **命令发送**： 向 MCU 发送控制指令（CLI，开发中）
+- **录制和回放**： bin 文件保存 MCU 原始输出数据，支持离线回放与 Hex 分析
+- **命令发送**： 向 MCU 发送控制指令（CLI）
 
 ## 协议规范
 
@@ -52,38 +52,40 @@ CS = Σ(Sync + Length + Body) & 0xFF
 
 ```
 src/
-├── composables/
-│   ├── useTelemetry.ts       # 串口 + 数据管理（单例）
-│   ├── useCanvasAnimation.ts
-│   └── useChartPath.ts
-├── serial/                   # 通信层
-│   ├── protocol.ts           # 协议常量与类型
-│   ├── port.ts               # WebSerial API 封装
-│   ├── parser.ts             # 帧解析状态机
-│   ├── manager.ts            # 串口事件分发
-│   ├── image-manager.ts      # 图传帧处理
-│   ├── log-manager.ts        # 日志帧处理
-│   ├── resource-manager.ts   # 资源帧处理
-│   └── __tests__/            # 单元 + 集成测试
-├── stores/connection.ts      # 连接状态（reactive）
+├── serial/                   # 协议层（解析 / 编解码 / 录制回放）
+│   ├── protocol.ts           #   帧类型、PixelFormat、Codec 定义
+│   ├── parser.ts             #   帧解析状态机
+│   ├── port.ts               #   WebSerial 封装
+│   ├── manager.ts            #   事件总线
+│   ├── image-processor.ts    #   图像解码器（RAW / RLE / HS / Tile / Patch）
+│   ├── *-manager.ts          #   图像 / 日志 / 资源管理器
+│   ├── record.ts             #   录制（→ .bin）
+│   ├── replay.ts             #   回放（.bin →）
+│   └── __tests__/            #   100+ 单元测试
+├── composables/              # Vue 状态管理
+│   └── useTelemetry.ts       #   串口 + 数据统一入口
+├── stores/                   # 全局状态
 ├── views/
-│   ├── TelemetryDashboard.vue
-│   ├── VisionView.vue
-│   └── SettingsView.vue
-└── components/
-    ├── SensorCard.vue
-    ├── ServoCard.vue
-    └── LogCard.vue
+│   ├── Overview.vue          #   主仪表板
+│   ├── HexView.vue           #   Hex 编辑器
+│   └── SettingsView.vue      #   设置
+└── components/               # UI 组件
+    ├── VisionPane.vue        #   图传渲染
+    ├── BinOutput.vue         #   二进制帧输出
+    ├── LogCard.vue           #   日志面板
+    └── SensorCard.vue        #   传感器卡片
 ```
 
 ## 快速开始
 
 ```bash
 npm install
-npm run dev     # 开发服务器（含 frontend mock，无需硬件）
-npm run test    # 运行测试，仅测试后端脚本
-npm run mcutest # 运行 MCU 测试
-npm run build   # 构建
+npm run dev        # 开发服务器
+npm run test       # 运行测试
+npm run build      # Web 构建
+npm run tauri:dev  # Tauri 桌面开发
+npm run tauri:build# 打包 EXE
+npm run cap:sync   # 打包 APK
 ```
 
 ## 开发进度
