@@ -329,11 +329,21 @@ function drawNoSignal() {
   ctx.fillText('No Signal', c.width / 2, c.height / 2);
 }
 
-console.log('[HOST] Theia Monitor started');
-console.log('[HOST] serial manager ready');
-console.log('[HOST] protocol parser initialized');
-console.log('[HOST] resource monitor mounted');
-console.log('[HOST] image stream waiting for frame');
+console.log('%c' + [
+"████████ ██   ██ ███████ ██  █████                         ",
+"   ██    ██   ██ ██      ██ ██   ██                        ",
+"   ██    ███████ █████   ██ ███████                        ",
+"   ██    ██   ██ ██      ██ ██   ██                        ",
+"   ██    ██   ██ ███████ ██ ██   ██                        ",
+"                                                            ",
+"                                                            ",
+"███    ███  ██████  ███    ██ ██ ████████  ██████  ██████  ",
+"████  ████ ██    ██ ████   ██ ██    ██    ██    ██ ██   ██ ",
+"██ ████ ██ ██    ██ ██ ██  ██ ██    ██    ██    ██ ██████  ",
+"██  ██  ██ ██    ██ ██  ██ ██ ██    ██    ██    ██ ██   ██ ",
+"██      ██  ██████  ██   ████ ██    ██     ██████  ██   ██ ",
+"                                                            ",
+].join('\n') + '%c  v0.1.0  |  serial ready', 'color:#20b8a6;font-weight:bold', 'color:#94a3b8');
 
 const binOutputRef = ref<InstanceType<typeof BinOutputSimple>>();
 let unsubRaw: (() => void) | null = null;

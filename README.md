@@ -2,11 +2,11 @@
 
 原名 Trace-Vector-PChost 为[我队21届智能车竞赛所适配](https://github.com/META-Xiao/Trace-Vector)上位机，在开发的过程中对其进行大幅扩展，目前可以支持市面上常见的MCU
 
-![showoverview](docs\img\showoverview.gif)
+<!-- ![showoverview](docs\img\showoverview.gif) -->
 
 ![showreplay](docs\img\showreplay.gif)
 
-![showhexview](docs\img\showhexview.gif)
+<!-- ![showhexview](docs\img\showhexview.gif) -->
 
 ## 功能特性
 
