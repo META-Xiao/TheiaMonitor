@@ -20,13 +20,31 @@
 
 ## 协议规范
 
-三路混合协议在**单条UART**上传输：
+三路混合协议在**单条 UART** 上传输（8N1）：
 
-| 帧类型 | ID | 大小 | 频率 |
-|--------|-----|------|------|
-| 图传 | 0xCC | 22566 B | 25 FPS |
-| 日志 | 0xDD | 4+N B | 5 Hz |
-| 资源 | 0xEE | 18 B | 5 Hz |
+```
+┌────────┬──────────┬─────────────────────┬──────┐
+│ Sync   │ Length   │ Body                │ CS   │
+│ 1B     │ 2B (BE)  │ N bytes             │ 1B   │
+└────────┴──────────┴─────────────────────┴──────┘
+CS = Σ(Sync + Length + Body) & 0xFF
+```
+
+| 帧类型 | Sync | Body 结构 | 典型频率 |
+|--------|------|-----------|---------|
+| 图传 | 0xCC | FrameID(2B) + W(1B) + H(1B) + Format(1B) + Payload | ≤ 120 FPS |
+| 日志 | 0xDD | UTF-8 文本 (≤ 256B) | 5 Hz |
+| 资源 | 0xEE | CPU(1B) + RAM(2B) + ROM(2B) + Speed(2B) + Servo(2B) | 5 Hz |
+
+**Format 字节**：高 4 位 = PixelFormat，低 4 位 = Codec
+
+| PixelFormat | 值 | 说明 | Codec | 值 | 说明 |
+|-------------|------|------|-------|------|------|
+| Binary1 | 0 | 1bpp 二值化 | RAW | 0 | 无压缩 |
+| Gray8 | 1 | 8bpp 灰度 | RLE | 1 | 游程编码 |
+| RGB565 | 2 | 16bpp 彩色 | HeatShrink | 2 | LZ 压缩 |
+| RGB888 | 3 | 24bpp 真彩 | Tile | 3 | 分块变化检测 |
+| YUV422 | 4 | 16bpp 色度抽样 | Patch | 4 | 矩形变化检测 |
 
 详见 [telemetry_protocol.md](docs/telemetry_protocol.md)
 
@@ -81,7 +99,7 @@ npm run build   # 构建
 - [x] CLI 命令发送面板
 - [x] Settings 功能实际生效（Channels 开关、Display 设置）
 - [x] 录制和回放功能（bin 文件直接读写）
-- [ ] WIFI 传输功能
+- [x] WIFI 传输功能
 - [ ] CLI 命令发送功能
 - [ ] CLI 在MCU上接收指令并执行相应任务的方法文档
 
@@ -93,8 +111,7 @@ npm run build   # 构建
   - [x] 不同帧类型（0xCC/0xDD/0xEE）用不同颜色高亮
   - [x] 每帧内分块标注：Header（帧头+长度+帧号）、Data（图像/日志/资源数据）、Checksum
   - [x] 鼠标悬停显示字段名称和数值解析
-  - [ ] 考虑是否添加悬浮在各帧时，右侧显示具体的渲染效果
-    - [x] 实现对图像 `Payload` 数据的预览
+  - [x] 悬浮帧时右侧显示图片预览 + Payload hex dump
 
 - [ ] `serial` 实现 Pixel Format：JPEG(5)、PNG(6)、User(7)
 - [ ] `serial` 实现 Codec：TileHS(5)、PatchHS(6) 
