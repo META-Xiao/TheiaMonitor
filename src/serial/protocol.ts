@@ -5,6 +5,7 @@ export const FRAME_TYPE = {
   IMAGE: 0xCC,      // 图传帧
   LOG: 0xDD,        // 日志帧
   RESOURCE: 0xEE,   // 资源帧
+  CLI: 0xFF,        // CLI输出帧
 } as const;
 
 export const FRAME_SIZE = {
@@ -99,7 +100,29 @@ export interface ResourceFrame {
   checksum: number;       // 1字节
 }
 
-export type TelemetryFrame = ImageFrame | LogFrame | ResourceFrame;
+/**
+ * CLI 帧 flags (0xFF 帧第一个数据字节)
+ */
+export enum CliFlags {
+  CONT = 0x00,  // 命令仍在执行，后续还有输出
+  END  = 0x01,  // 命令执行完毕
+  ERR  = 0x02,  // 命令执行出错（可与 END 组合：0x03）
+}
+
+/**
+ * CLI输出帧 (0xFF)
+ * 帧结构: ID(1) + Length(2) + Flags(1) + Text(Length-1 B) + Checksum(1)
+ * Length 包含 Flags 字节，最小 Length=1（仅 Flags，无文本）
+ */
+export interface CliFrame {
+  type: 'CLI';
+  length: number;
+  flags: CliFlags;        // 执行状态
+  text: string;           // UTF-8 文本块（可为空）
+  checksum: number;
+}
+
+export type TelemetryFrame = ImageFrame | LogFrame | ResourceFrame | CliFrame;
 
 /**
  * 帧解析状态机
@@ -109,6 +132,7 @@ export enum FrameParseState {
   READ_IMAGE_DATA = 1,   // 读图传帧数据
   READ_LOG_DATA = 2,     // 读日志帧数据
   READ_RESOURCE_DATA = 3,// 读资源帧数据
+  READ_CLI_DATA = 4,     // 读CLI输出帧数据
 }
 
 /**

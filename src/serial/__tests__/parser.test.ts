@@ -7,6 +7,8 @@ import {
   ImageFrame,
   LogFrame,
   ResourceFrame,
+  CliFrame,
+  CliFlags,
   TelemetryFrame,
   PixelFormat,
   Codec,
@@ -489,6 +491,94 @@ describe('FrameParser', () => {
 
       expect(results).toHaveLength(1);
       expect((results[0] as LogFrame).logData).toBe('Test');
+    });
+  });
+
+  describe('CLI Frame (0xFF)', () => {
+    function buildCliFrame(text: string, flags: CliFlags = CliFlags.END): Uint8Array {
+      const data = new TextEncoder().encode(text);
+      const length = 1 + data.length; // Flags(1) + Text
+      const frameData = new Uint8Array(2 + length + 1);
+      frameData[0] = (length >> 8) & 0xFF;
+      frameData[1] = length & 0xFF;
+      frameData[2] = flags;
+      frameData.set(data, 3);
+      const toCheck = new Uint8Array(1 + 2 + length);
+      toCheck[0] = FRAME_TYPE.CLI;
+      toCheck.set(frameData.slice(0, 2 + length), 1);
+      frameData[2 + length] = calculateChecksum(toCheck);
+      const frame = new Uint8Array(1 + frameData.length);
+      frame[0] = FRAME_TYPE.CLI;
+      frame.set(frameData, 1);
+      return frame;
+    }
+
+    it('should parse CLI frame with END flag', () => {
+      const results = parser.parse(buildCliFrame('OK\r\n', CliFlags.END));
+      expect(results).toHaveLength(1);
+      expect(results[0]).not.toBeInstanceOf(FrameParseError);
+      const f = results[0] as CliFrame;
+      expect(f.type).toBe('CLI');
+      expect(f.flags).toBe(CliFlags.END);
+      expect(f.text).toBe('OK\r\n');
+    });
+
+    it('should parse CLI frame with CONT flag', () => {
+      const results = parser.parse(buildCliFrame('1\r\n', CliFlags.CONT));
+      expect(results).toHaveLength(1);
+      const f = results[0] as CliFrame;
+      expect(f.flags).toBe(CliFlags.CONT);
+      expect(f.text).toBe('1\r\n');
+    });
+
+    it('should parse flags-only END frame (no text)', () => {
+      // Length=1, only Flags byte, no text
+      const frameData = new Uint8Array(2 + 1 + 1);
+      frameData[0] = 0x00; frameData[1] = 0x01; // length=1
+      frameData[2] = CliFlags.END;
+      const toCheck = new Uint8Array([FRAME_TYPE.CLI, 0x00, 0x01, CliFlags.END]);
+      frameData[3] = calculateChecksum(toCheck);
+      const frame = new Uint8Array([FRAME_TYPE.CLI, ...frameData]);
+      const results = parser.parse(frame);
+      expect(results).toHaveLength(1);
+      const f = results[0] as CliFrame;
+      expect(f.flags).toBe(CliFlags.END);
+      expect(f.text).toBe('');
+    });
+
+    it('should parse multi-chunk CONT frames followed by END', () => {
+      const f1 = buildCliFrame('line1\n', CliFlags.CONT);
+      const f2 = buildCliFrame('line2\n', CliFlags.END);
+      const combined = new Uint8Array(f1.length + f2.length);
+      combined.set(f1); combined.set(f2, f1.length);
+      const results = parser.parse(combined);
+      expect(results).toHaveLength(2);
+      expect((results[0] as CliFrame).flags).toBe(CliFlags.CONT);
+      expect((results[1] as CliFrame).flags).toBe(CliFlags.END);
+    });
+
+    it('should handle fragmented CLI frame byte-by-byte', () => {
+      const frame = buildCliFrame('hello', CliFlags.END);
+      let results: (TelemetryFrame | FrameParseError)[] = [];
+      for (const b of frame) results = results.concat(parser.parse(new Uint8Array([b])));
+      expect(results).toHaveLength(1);
+      const f = results[0] as CliFrame;
+      expect(f.text).toBe('hello');
+      expect(f.flags).toBe(CliFlags.END);
+    });
+
+    it('should reject invalid checksum', () => {
+      const frame = buildCliFrame('test', CliFlags.END);
+      frame[frame.length - 1] ^= 0xFF;
+      const results = parser.parse(frame);
+      expect(results[0]).toBeInstanceOf(FrameParseError);
+      expect((results[0] as FrameParseError).code).toBe('CLI_CHECKSUM_ERROR');
+    });
+
+    it('should reject length=0 (must be >= 1 for Flags byte)', () => {
+      const frame = new Uint8Array([FRAME_TYPE.CLI, 0x00, 0x00, 0x00]);
+      const results = parser.parse(frame);
+      expect(results.some(r => r instanceof FrameParseError && (r as FrameParseError).code === 'CLI_LENGTH_ERROR')).toBe(true);
     });
   });
 

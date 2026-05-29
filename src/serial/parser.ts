@@ -5,6 +5,8 @@ import {
   ImageFrame,
   LogFrame,
   ResourceFrame,
+  CliFrame,
+  CliFlags,
   FrameParseState,
   verifyChecksum,
   parseFormat,
@@ -107,6 +109,9 @@ export class FrameParser {
       case FrameParseState.READ_RESOURCE_DATA:
         return this.handleResourceData(byte);
 
+      case FrameParseState.READ_CLI_DATA:
+        return this.handleCliData(byte);
+
       default:
         throw new Error(`Unknown state: ${this.state}`);
     }
@@ -135,7 +140,14 @@ export class FrameParser {
         this.currentFrameType = FRAME_TYPE.RESOURCE;
         this.state = FrameParseState.READ_RESOURCE_DATA;
         this.bufferPos = 0;
-        this.targetSize = 0; // 先读 Length 字段动态确定大小
+        this.targetSize = 0;
+        return null;
+
+      case FRAME_TYPE.CLI:
+        this.currentFrameType = FRAME_TYPE.CLI;
+        this.state = FrameParseState.READ_CLI_DATA;
+        this.bufferPos = 0;
+        this.targetSize = 0;
         return null;
 
       default:
@@ -325,6 +337,44 @@ export class FrameParser {
 
     this.resetState();
     return { type: 'RESOURCE', length, resData: new Uint8Array(resData), checksum } as ResourceFrame;
+  }
+
+  /**
+   * 读CLI输出帧数据：Length(2) + Flags(1) + Text(Length-1 B) + Checksum(1)
+   * Length 包含 Flags 字节，最小 Length=1
+   */
+  private handleCliData(byte: number): TelemetryFrame | null {
+    if (this.bufferPos < 2) {
+      this.buffer[this.bufferPos++] = byte;
+      return null;
+    }
+
+    if (this.bufferPos === 2) {
+      const length = (this.buffer[0] << 8) | this.buffer[1];
+      if (length < 1 || length > 257) {
+        throw new FrameParseError('CLI_LENGTH_ERROR', `CLI frame length ${length} out of range`);
+      }
+      this.targetSize = 2 + length + 1;
+    }
+
+    this.buffer[this.bufferPos++] = byte;
+
+    if (this.bufferPos < this.targetSize) return null;
+
+    const length = (this.buffer[0] << 8) | this.buffer[1];
+    const flags: CliFlags = this.buffer[2];
+    const textBytes = this.buffer.slice(3, 2 + length);
+    const checksum = this.buffer[this.bufferPos - 1];
+
+    const dataToCheck = new Uint8Array(1 + this.bufferPos - 1);
+    dataToCheck[0] = FRAME_TYPE.CLI;
+    dataToCheck.set(this.buffer.slice(0, this.bufferPos - 1), 1);
+    if (!verifyChecksum(dataToCheck, checksum)) {
+      throw new FrameParseError('CLI_CHECKSUM_ERROR', 'CLI frame checksum mismatch');
+    }
+
+    this.resetState();
+    return { type: 'CLI', length, flags, text: new TextDecoder('utf-8').decode(textBytes), checksum };
   }
 
   /**

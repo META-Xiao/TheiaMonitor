@@ -30,6 +30,8 @@ serialManager.on((event) => {
 
 const current = ref(resourceManager.getCurrentData());
 const mcuLogs = ref<string[]>([]);
+const cliOutput = ref<string>('');
+const cliRunning = ref(false);  // true = MCU 正在执行命令（收到 END 前）
 const imageFps = ref(0);
 // slotPoints[i] = 对应 resourceSlots[i] 的历史数据点
 const slotPoints = ref<number[][]>([]);
@@ -87,6 +89,13 @@ imageManager.on((event) => {
 logManager.on((event) => {
   if (event.type !== 'LOG_RECEIVED') return;
   mcuLogs.value = [...mcuLogs.value, event.entry.text];
+});
+serialManager.on((event) => {
+  if (event.type === 'FRAME' && event.frame.type === 'CLI') {
+    const f = event.frame;
+    cliOutput.value += f.text;
+    cliRunning.value = (f.flags & 0x01) === 0; // CONT=0x00 → running, END=0x01 → done
+  }
 });
 
 export function useTelemetry() {
@@ -184,7 +193,7 @@ export function useTelemetry() {
 
   return {
     serialManager, resourceManager, imageManager,
-    current, mcuLogs, imageFps,
+    current, mcuLogs, cliOutput, cliRunning, imageFps,
     slotPoints, networkPoints, networkRxKbps, networkRxLabel,
     resourceSlots, overviewCards,
     hasSignal, cpuVal, ramVal, romVal, speedMs, servoDeg, servoVisualDeg,
