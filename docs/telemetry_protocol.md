@@ -423,51 +423,6 @@ void cli_send(const char *text, uint8_t flags) {
 
 ## 8. TODO / 未来优化
 
-### 8.1 Codec 7 — SparseBoundary：灰度/二值 + 边界坐标分离（参考逐飞助手协议）
-
-**适用 PixelFormat**：仅 `Binary1` (0) 和 `Gray8` (1)
-
-**Format 字节**：
-| Format | PixelFormat | Codec | 用途 |
-|--------|-------------|-------|------|
-| `0x07` | Binary1 | SparseBoundary | 二值化底图 + 边界坐标 |
-| `0x17` | Gray8   | SparseBoundary | 灰度底图 + 边界坐标 |
-
-**Payload 结构**：
-
-```
-┌──────────────────────┬──────────────────────────────────────────────────┐
-│ ImageData            │ BoundarySection                                  │
-│ Binary1: ceil(W×H/8)B│                                                  │
-│ Gray8:   W×H B       │                                                  │
-└──────────────────────┴──────────────────────────────────────────────────┘
-
-BoundarySection:
-  LineCount(1B)  边界线数量（可为 0，表示纯底图无标注）
-  
-  每条线:
-    Color     (2B)  RGB565 大端，该线的绘制颜色
-    Count     (1B)  坐标点数（= 图像高度 H，因每行一个 X 坐标）
-    X[0..H-1] (1B each)  各行的 X 坐标（Y 隐式 = 数组下标）
-```
-
-**188×120 示例**（3 条边界线 左/中/右）：
-
-| 部分 | 大小 | 说明 |
-|------|------|------|
-| ImageData (Gray8) | 22,560 B | 188×120 灰度原图直发 |
-| LineCount | 1 B | = 3 |
-| 左线 Color+Count+Xs | 2+1+120 = 123 B | 红色 0xF800 |
-| 中线 Color+Count+Xs | 123 B | 绿色 0x07E0 |
-| 右线 Color+Count+Xs | 123 B | 蓝色 0x001F |
-| **总 Payload** | **22,930 B** | |
-| **总帧** | **22,939 B** | vs RGB565 的 45,129 B，**减半** |
-
-**设计决策**（已确定）：
-- 复用现有 0xCC 帧，扩展 Codec=7，不引入新帧类型
-- 坐标 8-bit（MT9V03X_W=188 < 255，足够）
-- 颜色 RGB565 原始值（2 字节），不做调色板索引
-
 ### 8.2 Tile 编码用于灰度/二值图
 
 Gray8/Binary1 + Tile 变化检测（类似现有 RGB565 Tile），P 帧仅发送变化的灰度/二值块。
