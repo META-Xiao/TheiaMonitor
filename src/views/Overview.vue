@@ -81,7 +81,8 @@
       </section>
     </main>
 
-    <SettingsView ref="settingsView" v-show="activeTab === 2" />
+    <InversePerspectiveView v-show="activeTab === 2" :frame="latestImage" />
+    <SettingsView ref="settingsView" v-show="activeTab === 3" />
     <HexView v-show="activeTab === 1" />
 
     <!-- 移动端底部导航 -->
@@ -93,7 +94,7 @@
           :key="tab"
           :class="{ on: activeTab === i }"
           @click="onBottomTab(i)"
-          @mouseenter="i === 2 ? onSettingsHover() : undefined"
+          @mouseenter="i === 3 ? onSettingsHover() : undefined"
         >
           <span class="tab-icon"><Icon :icon="tabIcons[i]" /></span>
           <span class="tab-label">{{ tab }}</span>
@@ -119,10 +120,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from "vue";
 import { Icon } from "@iconify/vue";
 import SettingsView from "./SettingsView.vue";
 import HexView from "./HexView.vue";
+import InversePerspectiveView from "./InversePerspectiveView.vue";
 import LogCard from "../components/LogCard.vue";
 import AvatarMenu from "../components/AvatarMenu.vue";
 import CliPanel from "../components/CliPanel.vue";
@@ -138,6 +140,7 @@ import { ReplayController } from "../serial/replay";
 import type { ReplayState } from "../serial/replay";
 import { RecordController } from "../serial/record";
 import type { RecordState } from "../serial/record";
+import type { ProcessedImageData } from "../serial/image-processor";
 import { serialManager as _sm } from "../composables/useTelemetry";
 
 const replayCtrl = new ReplayController(_sm);
@@ -220,9 +223,10 @@ function openTzPicker() {
   }
 }
 
-const tabs = ["Overview", "Hex", "Settings"];
-const tabIcons = ["lucide:layout-dashboard", "lucide:file-code", "lucide:settings"];
-const activeTab = ref(0);
+const tabs = ["Overview", "Hex", "Vision", "Settings"];
+const tabIcons = ["lucide:layout-dashboard", "lucide:file-code", "lucide:scan-line", "lucide:settings"];
+const requestedTab = new URLSearchParams(window.location.search).get('tab');
+const activeTab = ref(requestedTab === 'vision' ? 2 : 0);
 const settingsView = ref<InstanceType<typeof SettingsView>>();
 
 const cliOpen = ref(false);
@@ -301,12 +305,12 @@ async function disconnectActive() {
 }
 
 const onSettingsHover = () => {
-  activeTab.value = 2;
+  activeTab.value = 3;
   settingsView.value?.openSheet();
 };
 const onBottomTab = (i: number) => {
-  if (i === 2 && window.innerWidth <= 640) {
-    activeTab.value = 2;
+  if (i === 3 && window.innerWidth <= 640) {
+    activeTab.value = 3;
     settingsView.value?.openSheet();
   } else {
     activeTab.value = i;
@@ -317,6 +321,7 @@ const visionPaneRef = ref<InstanceType<typeof VisionPane>>();
 const imageCanvas = ref<HTMLCanvasElement>();
 const { stop: stopAnim } = useCanvasAnimation(imageCanvas);
 const imageSize = ref({ w: 0, h: 0 });
+const latestImage = shallowRef<ProcessedImageData | null>(null);
 let unsubImage: (() => void) | null = null;
 
 function drawNoSignal() {
@@ -359,6 +364,7 @@ onMounted(() => {
   drawNoSignal();
   unsubImage = imageManager.on((event) => {
     if (event.type !== 'IMAGE_RECEIVED') return;
+    latestImage.value = event.data;
     if (visionPaneRef.value?.isPaused) return;
     stopAnim();
     const c = imageCanvas.value;
