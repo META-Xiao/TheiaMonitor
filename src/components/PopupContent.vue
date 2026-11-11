@@ -18,8 +18,26 @@
           <div v-if="activeChannel === 'uart'" class="connect-detail">
             <input v-model.number="serialDraft.baud" class="popup-input" placeholder="115200" type="number" min="1200" max="4000000" />
           </div>
-          <div v-else-if="activeChannel === 'wifi'" class="connect-detail">
-            <input v-model="serialDraft.wifiEndpoint" class="popup-input" placeholder="192.168.4.1:8080" />
+          <div v-else-if="activeChannel === 'wifi'" class="connect-detail wifi-detail">
+            <input
+              v-model="serialDraft.wifiEndpoint"
+              class="popup-input"
+              placeholder="10.133.25.4:8086"
+              aria-label="PC IPv4 address and TCP port"
+              @input="$emit('wifiEdit')"
+            />
+            <div class="wifi-tools">
+              <span class="popup-hint">PC IP : Port</span>
+              <button
+                v-if="wifiAutoSupported"
+                class="wifi-detect"
+                :disabled="wifiDetecting"
+                title="Use the current PC IPv4 address"
+                @click="$emit('detectWifiIp')"
+              >{{ wifiDetecting ? 'Detecting...' : 'Auto IP' }}</button>
+            </div>
+            <span class="popup-hint">Device must use this PC IP and port.</span>
+            <span v-if="wifiIpError" class="popup-hint" role="status">{{ wifiIpError }}</span>
           </div>
           <div v-else class="connect-detail">
             <span>USB Virtual COM</span>
@@ -121,11 +139,16 @@ defineProps<{
   allChannels: { id: ChannelId; label: string; icon: string }[];
   activeChannel: ChannelId;
   serialDraft: { baud: number; wifiEndpoint: string };
+  wifiAutoSupported: boolean;
+  wifiDetecting: boolean;
+  wifiIpError: string;
 }>();
 
 defineEmits<{
   selectChannel: [id: ChannelId];
   connect: [];
+  detectWifiIp: [];
+  wifiEdit: [];
   disconnect: [];
   replayChooseFile: [];
   replayRun: [];
@@ -217,6 +240,20 @@ defineEmits<{
   font-size: 12px;
   font-weight: 800;
 }
+.wifi-detail { display: grid; gap: 8px; }
+.wifi-detail .popup-input { min-width: 0; box-sizing: border-box; }
+.wifi-tools { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.wifi-detect {
+  border: 1px solid var(--card-border);
+  border-radius: 7px;
+  padding: 4px 8px;
+  background: var(--card-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.wifi-detect:disabled { opacity: 0.5; cursor: default; }
 .popup-input {
   width: 100%;
   border: 1px solid var(--card-border);
@@ -239,6 +276,7 @@ defineEmits<{
   font-weight: 900;
   cursor: pointer;
 }
+.popup-action:disabled { opacity: 0.5; cursor: not-allowed; }
 .popup-action.danger {
   margin-top: 4px;
   background: #ef4444;

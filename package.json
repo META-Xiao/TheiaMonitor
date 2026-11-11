@@ -6,6 +6,8 @@
   "scripts": {
     "front": "vite --mode front",
     "vite": "vite",
+    "build:web": "vite build",
+    "preview": "vite preview --host 0.0.0.0",
     "dev": "tauri dev",
     "build": "tauri build",
     "test": "vitest run",
@@ -27,10 +29,12 @@
     "@capacitor/cli": "^6.2.1",
     "@tauri-apps/cli": "^2.11.2",
     "@types/node": "^20.0.0",
+    "@types/ws": "^8.18.2",
     "@vitejs/plugin-vue": "^4.0.0",
     "tsx": "^4.0.0",
     "typescript": "^5.0.0",
     "vite": "^4.0.0",
-    "vitest": "^0.34.0"
+    "vitest": "^0.34.0",
+    "ws": "^8.22.2"
   }
 }

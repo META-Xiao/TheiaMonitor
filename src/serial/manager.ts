@@ -27,6 +27,7 @@ export class TelemetrySerialManager {
     this.serialPort = new SerialPortManager();
     this.tcpPort = new TcpPortManager();
     this.frameParser = new FrameParser();
+    this.tcpPort.onStreamReset(() => { this.frameParser = new FrameParser(); });
 
     this.tcpPort.onData((data: Uint8Array) => {
       if (!this.isReading) return;
@@ -86,6 +87,7 @@ export class TelemetrySerialManager {
 
   /** TCP 连接 */
   async connectTcp(ip: string, port: number): Promise<void> {
+    this.frameParser = new FrameParser();
     console.log('[Manager] connectTcp called:', ip, port);
     try {
       await this.tcpPort.connect(ip, port);
