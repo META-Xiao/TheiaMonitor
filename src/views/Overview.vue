@@ -82,12 +82,13 @@
           </section>
         </div>
 
-        <VisionPane ref="visionPaneRef" :fps="imageFps" :image-size="imageSize" />
+        <VisionPane ref="visionPaneRef" :fps="imageFps" :image-size="imageSize" :has-signal="!!latestImage" />
       </section>
     </main>
 
-    <SettingsView ref="settingsView" v-show="activeTab === 2" />
-    <HexView v-show="activeTab === 1" />
+    <InversePerspectiveView v-show="activeTab === 1" :frame="latestImage" :fps="imageFps" />
+    <SettingsView ref="settingsView" v-show="activeTab === 3" />
+    <HexView v-show="activeTab === 2" />
 
     <!-- 移动端底部导航 -->
     <nav class="bottom-nav">
@@ -98,7 +99,7 @@
           :key="tab"
           :class="{ on: activeTab === i }"
           @click="onBottomTab(i)"
-          @mouseenter="i === 2 ? onSettingsHover() : undefined"
+          @mouseenter="i === 3 ? onSettingsHover() : undefined"
         >
           <span class="tab-icon"><Icon :icon="tabIcons[i]" /></span>
           <span class="tab-label">{{ tab }}</span>
@@ -124,18 +125,21 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, provide, ref, shallowRef, watch } from "vue";
 import { Icon } from "@iconify/vue";
 import SettingsView from "./SettingsView.vue";
 import HexView from "./HexView.vue";
+import InversePerspectiveView from "./InversePerspectiveView.vue";
+import { ipmMatrix } from "../stores/vision";
+import { renderVisionFrame } from "../utils/visionFrame";
 import LogCard from "../components/LogCard.vue";
 import AvatarMenu from "../components/AvatarMenu.vue";
 import CliPanel from "../components/CliPanel.vue";
+import { useVisionRecording, visionRecordingKey } from "../composables/useVisionRecording";
 import VisionPane from "../components/VisionPane.vue";
 import BinOutputSimple from "../components/BinOutputSimple.vue";
 import SensorCard from "../components/SensorCard.vue";
 import ServoCard from "../components/ServoCard.vue";
-import { useCanvasAnimation } from "../composables/useCanvasAnimation";
 import { useTelemetry } from "../composables/useTelemetry";
 import { conn } from "../stores/connection";
 import { resourceSlots } from "../stores/resourceSlots";
@@ -143,7 +147,11 @@ import { ReplayController } from "../serial/replay";
 import type { ReplayState } from "../serial/replay";
 import { RecordController } from "../serial/record";
 import type { RecordState } from "../serial/record";
+import type { ProcessedImageData } from "../serial/image-processor";
 import { serialManager as _sm } from "../composables/useTelemetry";
+
+const videoRecording = useVisionRecording();
+provide(visionRecordingKey, videoRecording);
 
 const replayCtrl = new ReplayController(_sm);
 const replayState = ref<ReplayState>('idle');
@@ -225,9 +233,10 @@ function openTzPicker() {
   }
 }
 
-const tabs = ["Overview", "Hex", "Settings"];
-const tabIcons = ["lucide:layout-dashboard", "lucide:file-code", "lucide:settings"];
-const activeTab = ref(0);
+const tabs = ["Overview", "Vision", "Hex", "Settings"];
+const tabIcons = ["lucide:layout-dashboard", "lucide:scan-line", "lucide:file-code", "lucide:settings"];
+const requestedTab = new URLSearchParams(window.location.search).get('tab');
+const activeTab = ref(requestedTab === 'vision' ? 1 : 0);
 const settingsView = ref<InstanceType<typeof SettingsView>>();
 
 const cliOpen = ref(false);
@@ -312,12 +321,12 @@ async function disconnectActive() {
 }
 
 const onSettingsHover = () => {
-  activeTab.value = 2;
+  activeTab.value = 3;
   settingsView.value?.openSheet();
 };
 const onBottomTab = (i: number) => {
-  if (i === 2 && window.innerWidth <= 640) {
-    activeTab.value = 2;
+  if (i === 3 && window.innerWidth <= 640) {
+    activeTab.value = 3;
     settingsView.value?.openSheet();
   } else {
     activeTab.value = i;
@@ -325,23 +334,23 @@ const onBottomTab = (i: number) => {
 };
 
 const visionPaneRef = ref<InstanceType<typeof VisionPane>>();
-const imageCanvas = ref<HTMLCanvasElement>();
-const { stop: stopAnim } = useCanvasAnimation(imageCanvas);
-const imageSize = ref({ w: 0, h: 0 });
+const latestImage = shallowRef<ProcessedImageData | null>(imageManager.getCurrentImage());
+const imageSize = computed(() => ({ w: latestImage.value?.width ?? 0, h: latestImage.value?.height ?? 0 }));
 let unsubImage: (() => void) | null = null;
 
-function drawNoSignal() {
-  const c = imageCanvas.value;
-  const ctx = c?.getContext('2d');
-  if (!c || !ctx) return;
-  ctx.fillStyle = '#0a0e1a';
-  ctx.fillRect(0, 0, c.width, c.height);
-  ctx.fillStyle = 'rgba(255,255,255,0.35)';
-  ctx.font = 'bold 14px Inter, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('No Signal', c.width / 2, c.height / 2);
-}
+// 热更新会替换子组件画布，绘制时读取当前引用；恢复播放立即显示最新帧。
+watch([latestImage, ipmMatrix, () => visionPaneRef.value?.canvas, () => visionPaneRef.value?.isPaused], () => {
+  const frame = latestImage.value;
+  const canvas = visionPaneRef.value?.canvas;
+  if (!frame || !canvas || visionPaneRef.value?.isPaused) return;
+  const context = canvas.getContext('2d');
+  if (!context) return;
+  const { width, height } = frame;
+  const pixelData = renderVisionFrame(frame, ipmMatrix.value);
+  if (canvas.width !== width) canvas.width = width;
+  if (canvas.height !== height) canvas.height = height;
+  context.putImageData(new ImageData(new Uint8ClampedArray(pixelData), width, height), 0, 0);
+}, { immediate: true, flush: 'post' });
 
 console.log('%c' + [
 "████████ ██   ██ ███████ ██  █████                         ",
@@ -366,20 +375,8 @@ let unsubReplayFrames: (() => void) | null = null;
 onMounted(() => {
   window.addEventListener("keydown", onKey);
   nowTimer = setInterval(() => { now.value = Date.now(); }, 1000);
-  imageCanvas.value = visionPaneRef.value?.canvas;
-  drawNoSignal();
   unsubImage = imageManager.on((event) => {
-    if (event.type !== 'IMAGE_RECEIVED') return;
-    if (visionPaneRef.value?.isPaused) return;
-    stopAnim();
-    const c = imageCanvas.value;
-    const ctx = c?.getContext('2d');
-    if (!c || !ctx) return;
-    const { width, height, pixelData } = event.data;
-    imageSize.value = { w: width, h: height };
-    c.width = width;
-    c.height = height;
-    ctx.putImageData(new ImageData(new Uint8ClampedArray(pixelData.buffer as ArrayBuffer), width, height), 0, 0);
+    if (event.type === 'IMAGE_RECEIVED') latestImage.value = event.data;
   });
   unsubRaw = serialManager.onRawData((data) => {
     binOutputRef.value?.pushRawData(data);
@@ -392,9 +389,9 @@ onMounted(() => {
   });
 });
 onUnmounted(() => {
+  videoRecording.dispose();
   window.removeEventListener("keydown", onKey);
   if (nowTimer) clearInterval(nowTimer);
-  stopAnim();
   unsubImage?.();
   unsubRaw?.();
   unsubReplayFrames?.();
