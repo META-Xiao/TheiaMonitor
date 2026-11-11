@@ -1,5 +1,5 @@
 <template>
-  <div class="vision-pane" :class="{ embedded }">
+  <div class="vision-pane" :class="{ embedded, fill }">
     <div class="pane-head">
       <span>{{ title }}</span>
       <div v-if="showFps" class="pane-actions"><b>{{ fps > 0 ? fps.toFixed(1) + ' FPS' : '-- FPS' }}</b></div>
@@ -33,10 +33,11 @@ withDefaults(defineProps<{
   imageSize: { w: number; h: number };
   title?: string;
   embedded?: boolean;
+  fill?: boolean;
   hasSignal?: boolean;
   showFps?: boolean;
   showRecording?: boolean;
-}>(), { title: 'Vision stream', embedded: false, hasSignal: true, showFps: true, showRecording: true });
+}>(), { title: 'Vision stream', embedded: false, fill: false, hasSignal: true, showFps: true, showRecording: true });
 
 const canvasEl = ref<HTMLCanvasElement>();
 const feedPaused = ref(false);
@@ -136,6 +137,8 @@ defineExpose({
 .vision-pane.embedded { height: auto; min-height: 420px; border: 0; border-radius: 0; background: transparent; box-shadow: none; backdrop-filter: none; }
 .embedded .canvas-wrap { inset: 58px 12px 64px; border-radius: 12px; }
 .embedded canvas { border-radius: 0; }
+.fill .canvas-wrap canvas { object-fit: fill; }
+.fill.embedded .canvas-wrap { inset: 42px 4px 48px; }
 .embedded .vision-foot { flex-wrap: wrap; gap: 8px; font-size: 10px; }
 .embedded .vision-controls :deep(.ctrl-btn) { width: 28px; height: 28px; font-size: 14px; }
 .embedded .vision-controls { gap: 5px; }

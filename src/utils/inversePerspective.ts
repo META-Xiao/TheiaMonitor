@@ -160,7 +160,30 @@ export function expandedPerspectiveView(
   return { width, height: fullHeight - top, matrix: translated(top) };
 }
 
-function invertMatrix3(matrix: HomographyMatrix): number[] | null {
+/** 自动裁掉画面外围空白，保持标定坐标不变；偏移仅用于显示。 */
+export function fittedPerspectiveView(matrix: HomographyMatrix, width: number, height: number) {
+  if (!matrix.flat().every(Number.isFinite) || !invertMatrix3(matrix)) return null;
+  const corners = [[0, 0], [width - 1, 0], [0, height - 1], [width - 1, height - 1]];
+  const denominators = corners.map(([x, y]) => matrix[2][0] * x + matrix[2][1] * y + matrix[2][2]);
+  if (denominators.some(d => Math.abs(d) < 1e-10 || d * denominators[0] <= 0)) return null;
+  const points = corners.map(([x, y], i) => ({
+    x: (matrix[0][0] * x + matrix[0][1] * y + matrix[0][2]) / denominators[i],
+    y: (matrix[1][0] * x + matrix[1][1] * y + matrix[1][2]) / denominators[i],
+  }));
+  const offsetX = -Math.floor(Math.min(...points.map(p => p.x)));
+  const offsetY = -Math.floor(Math.min(...points.map(p => p.y)));
+  const outputWidth = Math.max(2, Math.ceil(Math.max(...points.map(p => p.x))) + offsetX + 1);
+  const outputHeight = Math.max(2, Math.ceil(Math.max(...points.map(p => p.y))) + offsetY + 1);
+  if (!Number.isFinite(outputWidth + outputHeight) || outputWidth > 4096 || outputHeight > 4096) return null;
+  const translated: HomographyMatrix = [
+    matrix[0].map((v, i) => v + offsetX * matrix[2][i]) as HomographyMatrix[0],
+    matrix[1].map((v, i) => v + offsetY * matrix[2][i]) as HomographyMatrix[0],
+    [...matrix[2]],
+  ];
+  return { matrix: translated, width: outputWidth, height: outputHeight, offsetX, offsetY };
+}
+
+export function invertMatrix3(matrix: HomographyMatrix): number[] | null {
   const [a, b, c] = matrix[0];
   const [d, e, f] = matrix[1];
   const [g, h, i] = matrix[2];

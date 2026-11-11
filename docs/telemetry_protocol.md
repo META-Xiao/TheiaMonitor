@@ -55,6 +55,18 @@
     | `5` | Tile+HEATSHRINK | Tile 变化检测后 HEATSHRINK 压缩变化区块数据 |
     | `6` | Patch+HEATSHRINK | Patch 变化检测后 HEATSHRINK 压缩矩形内数据 |
     | `7` | SparseBoundary | 灰度/二值底图 + 边界坐标分离传输（PixelFormat 0/1 专用） |
+    | `8` | CoordinateBoundary | RAW 底图 + 带空间标记的有符号 XY 点列 |
+
+    **Codec 8 — CoordinateBoundary**（PixelFormat 0/1，MOD2）：
+
+    `Payload = RAW图像 + LineCount:u8 + 各条点列`。
+    每条点列为 `Space:u8 + Color:u16BE(RGB565) + Count:u8 + (X:i16BE,Y:i16BE) × Count`。
+    Space=0 为原图坐标，Space=1 为标定矩阵输出的 IPM 坐标，均非扩展画布坐标。
+    无效点省略，Count=0 清除该条线；每帧独立，不依赖上一帧。
+    MOD2 只发选中的红色左边或蓝色右边，以及绿色 IPM 中线。
+    原图视图用 H⁻¹ 回投中线；IPM 视图对原图边界用 H，中线只加画布偏移。
+    MCU 与上位机必须使用同一 H；显示裁切、拉伸不改变传输坐标。
+    MOD1 继续使用 Codec7 及 0xFF 隐藏规则。
 
     **Codec 3 — Tile 编码格式**：
 

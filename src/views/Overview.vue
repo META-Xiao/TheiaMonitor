@@ -130,6 +130,8 @@ import { Icon } from "@iconify/vue";
 import SettingsView from "./SettingsView.vue";
 import HexView from "./HexView.vue";
 import InversePerspectiveView from "./InversePerspectiveView.vue";
+import { ipmMatrix } from "../stores/vision";
+import { renderVisionFrame } from "../utils/visionFrame";
 import LogCard from "../components/LogCard.vue";
 import AvatarMenu from "../components/AvatarMenu.vue";
 import CliPanel from "../components/CliPanel.vue";
@@ -337,13 +339,14 @@ const imageSize = computed(() => ({ w: latestImage.value?.width ?? 0, h: latestI
 let unsubImage: (() => void) | null = null;
 
 // 热更新会替换子组件画布，绘制时读取当前引用；恢复播放立即显示最新帧。
-watch([latestImage, () => visionPaneRef.value?.canvas, () => visionPaneRef.value?.isPaused], () => {
+watch([latestImage, ipmMatrix, () => visionPaneRef.value?.canvas, () => visionPaneRef.value?.isPaused], () => {
   const frame = latestImage.value;
   const canvas = visionPaneRef.value?.canvas;
   if (!frame || !canvas || visionPaneRef.value?.isPaused) return;
   const context = canvas.getContext('2d');
   if (!context) return;
-  const { width, height, pixelData } = frame;
+  const { width, height } = frame;
+  const pixelData = renderVisionFrame(frame, ipmMatrix.value);
   if (canvas.width !== width) canvas.width = width;
   if (canvas.height !== height) canvas.height = height;
   context.putImageData(new ImageData(new Uint8ClampedArray(pixelData), width, height), 0, 0);
