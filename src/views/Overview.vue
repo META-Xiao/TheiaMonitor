@@ -82,13 +82,13 @@
           </section>
         </div>
 
-        <VisionPane ref="visionPaneRef" :fps="imageFps" :image-size="imageSize" />
+        <VisionPane ref="visionPaneRef" :fps="imageFps" :image-size="imageSize" :has-signal="!!latestImage" />
       </section>
     </main>
 
-    <InversePerspectiveView v-show="activeTab === 2" :frame="latestImage" />
+    <InversePerspectiveView v-show="activeTab === 1" :frame="latestImage" :fps="imageFps" />
     <SettingsView ref="settingsView" v-show="activeTab === 3" />
-    <HexView v-show="activeTab === 1" />
+    <HexView v-show="activeTab === 2" />
 
     <!-- 移动端底部导航 -->
     <nav class="bottom-nav">
@@ -228,10 +228,10 @@ function openTzPicker() {
   }
 }
 
-const tabs = ["Overview", "Hex", "Vision", "Settings"];
-const tabIcons = ["lucide:layout-dashboard", "lucide:file-code", "lucide:scan-line", "lucide:settings"];
+const tabs = ["Overview", "Vision", "Hex", "Settings"];
+const tabIcons = ["lucide:layout-dashboard", "lucide:scan-line", "lucide:file-code", "lucide:settings"];
 const requestedTab = new URLSearchParams(window.location.search).get('tab');
-const activeTab = ref(requestedTab === 'vision' ? 2 : 0);
+const activeTab = ref(requestedTab === 'vision' ? 1 : 0);
 const settingsView = ref<InstanceType<typeof SettingsView>>();
 
 const cliOpen = ref(false);
@@ -335,19 +335,6 @@ const imageSize = ref({ w: 0, h: 0 });
 const latestImage = shallowRef<ProcessedImageData | null>(null);
 let unsubImage: (() => void) | null = null;
 
-function drawNoSignal() {
-  const c = imageCanvas.value;
-  const ctx = c?.getContext('2d');
-  if (!c || !ctx) return;
-  ctx.fillStyle = '#0a0e1a';
-  ctx.fillRect(0, 0, c.width, c.height);
-  ctx.fillStyle = 'rgba(255,255,255,0.35)';
-  ctx.font = 'bold 14px Inter, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('No Signal', c.width / 2, c.height / 2);
-}
-
 console.log('%c' + [
 "████████ ██   ██ ███████ ██  █████                         ",
 "   ██    ██   ██ ██      ██ ██   ██                        ",
@@ -372,7 +359,6 @@ onMounted(() => {
   window.addEventListener("keydown", onKey);
   nowTimer = setInterval(() => { now.value = Date.now(); }, 1000);
   imageCanvas.value = visionPaneRef.value?.canvas;
-  drawNoSignal();
   unsubImage = imageManager.on((event) => {
     if (event.type !== 'IMAGE_RECEIVED') return;
     latestImage.value = event.data;

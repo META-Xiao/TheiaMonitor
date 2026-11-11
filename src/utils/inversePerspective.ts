@@ -123,6 +123,43 @@ export function warpPerspectiveWithHomography(
   );
 }
 
+/** 与 Trace-Vector 测试一致：五倍视野，原窗口底部居中，裁掉相机顶行之外的空行。 */
+export function expandedPerspectiveView(
+  matrix: HomographyMatrix,
+  sourceWidth: number,
+  sourceHeight: number,
+  outputWidth: number,
+  outputHeight: number,
+) {
+  const factor = Math.min(5, 4096 / outputWidth, 4096 / outputHeight);
+  const width = Math.round(outputWidth * factor);
+  const fullHeight = Math.round(outputHeight * factor);
+  const offsetX = (width - outputWidth) / 2;
+  const offsetY = fullHeight - outputHeight;
+  const translated = (top: number): HomographyMatrix => [
+    matrix[0].map((v, i) => v + offsetX * matrix[2][i]) as HomographyMatrix[0],
+    matrix[1].map((v, i) => v + (offsetY - top) * matrix[2][i]) as HomographyMatrix[0],
+    [...matrix[2]],
+  ];
+  const inverse = invertMatrix3(translated(0));
+  if (!inverse) return null;
+  let top = 0;
+  // 只在标定或分辨率变化时检测覆盖；最近邻边界与 cv2.warpPerspective 一致。
+  coverage: for (let y = 0; y <= offsetY; y++) {
+    for (let x = 0; x < width; x++) {
+      const d = inverse[6] * x + inverse[7] * y + inverse[8];
+      if (Math.abs(d) < 1e-10) continue;
+      const sx = (inverse[0] * x + inverse[1] * y + inverse[2]) / d;
+      const sy = (inverse[3] * x + inverse[4] * y + inverse[5]) / d;
+      if (sx >= -0.5 && sx < sourceWidth - 0.5 && sy >= -0.5 && sy < sourceHeight - 0.5) {
+        top = y;
+        break coverage;
+      }
+    }
+  }
+  return { width, height: fullHeight - top, matrix: translated(top) };
+}
+
 function invertMatrix3(matrix: HomographyMatrix): number[] | null {
   const [a, b, c] = matrix[0];
   const [d, e, f] = matrix[1];

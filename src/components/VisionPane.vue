@@ -1,11 +1,12 @@
 <template>
-  <div class="vision-pane">
+  <div class="vision-pane" :class="{ embedded }">
     <div class="pane-head">
-      <span>Vision stream</span>
-      <b>{{ fps > 0 ? fps.toFixed(1) + ' FPS' : '-- FPS' }}</b>
+      <span>{{ title }}</span>
+      <div class="pane-actions"><b>{{ fps > 0 ? fps.toFixed(1) + ' FPS' : '-- FPS' }}</b><slot name="header-actions" /></div>
     </div>
     <div class="canvas-wrap">
       <canvas ref="canvasEl" width="188" height="120" />
+      <div v-if="!hasSignal" class="no-signal">NO SIGNAL</div>
     </div>
     <div class="vision-foot">
       <span>{{ imageSize.w > 0 ? `Source ${imageSize.w}×${imageSize.h}` : 'Source --×--' }}</span>
@@ -38,10 +39,13 @@
 import { ref } from 'vue';
 import { Icon } from '@iconify/vue';
 
-const props = defineProps<{
+withDefaults(defineProps<{
   fps: number;
   imageSize: { w: number; h: number };
-}>();
+  title?: string;
+  embedded?: boolean;
+  hasSignal?: boolean;
+}>(), { title: 'Vision stream', embedded: false, hasSignal: true });
 
 const canvasEl = ref<HTMLCanvasElement>();
 const feedPaused = ref(false);
@@ -175,6 +179,15 @@ defineExpose({
 .ctrl-btn:hover { background: var(--surface); }
 .ctrl-btn.recording { color: #f59e0b; }
 .ctrl-btn.stop { color: #ef4444; }
+
+.pane-actions { display: flex; align-items: center; gap: 10px; }
+.no-signal { position: absolute; inset: 0; display: grid; place-items: center; color: var(--text-dim); font: 700 13px "JetBrains Mono", monospace; letter-spacing: .15em; }
+.vision-pane.embedded { height: auto; min-height: 420px; border: 0; border-radius: 0; background: transparent; box-shadow: none; backdrop-filter: none; }
+.embedded .canvas-wrap { inset: 58px 12px 64px; border-radius: 12px; }
+.embedded canvas { border-radius: 0; }
+.embedded .vision-foot { flex-wrap: wrap; gap: 8px; font-size: 10px; }
+.embedded .ctrl-btn { width: 28px; height: 28px; font-size: 14px; }
+.embedded .vision-controls { gap: 5px; }
 
 @media (max-width: 1280px) {
   .vision-pane { height: 420px; }
