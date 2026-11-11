@@ -32,9 +32,14 @@
           :all-channels="allChannels"
           :active-channel="activeChannel"
           :serial-draft="serialDraft"
+          :wifi-auto-supported="wifiAutoSupported"
+          :wifi-detecting="wifiDetecting"
+          :wifi-ip-error="wifiIpError"
           class="avatar-popup"
           @select-channel="activeChannel = $event"
           @connect="onConnect"
+          @detect-wifi-ip="detectWifiIp(true)"
+          @wifi-edit="onWifiEdit"
           @disconnect="$emit('disconnect')"
           @replay-choose-file="replayChooseFile"
           @replay-run="replayRun"
@@ -68,9 +73,14 @@
           :all-channels="allChannels"
           :active-channel="activeChannel"
           :serial-draft="serialDraft"
+          :wifi-auto-supported="wifiAutoSupported"
+          :wifi-detecting="wifiDetecting"
+          :wifi-ip-error="wifiIpError"
           class="avatar-popup-m-fixed"
           @select-channel="activeChannel = $event"
           @connect="onConnect"
+          @detect-wifi-ip="detectWifiIp(true)"
+          @wifi-edit="onWifiEdit"
           @disconnect="$emit('disconnect')"
           @replay-choose-file="replayChooseFile"
           @replay-run="replayRun"
@@ -87,7 +97,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
+import { invoke, isTauri } from '@tauri-apps/api/core';
+import { getBrowserLocalIpv4 } from '../serial/browser-tcp';
 import { Icon } from '@iconify/vue';
 import { conn } from '../stores/connection';
 import { ReplayController } from '../serial/replay';
@@ -137,9 +149,55 @@ const allChannels: { id: ChannelId; label: string; icon: string }[] = [
 ];
 const activeChannel = ref<ChannelId>('usb_cdc');
 
+const wifiStorageKey = 'theia.wifi-endpoint';
+let savedWifi: { endpoint?: string; auto?: boolean } = {};
+try {
+  const saved = JSON.parse(localStorage.getItem(wifiStorageKey) || '{}');
+  if (saved && typeof saved === 'object') savedWifi = saved;
+} catch { /* Storage may be unavailable in a browser. */ }
+
+const wifiAutoSupported = isTauri() || typeof fetch === 'function';
+const wifiAuto = ref(savedWifi.auto !== false);
+const wifiDetecting = ref(false);
+const wifiIpError = ref('');
 const serialDraft = reactive({
   baud: 115200,
-  wifiEndpoint: '10.213.100.4:8086',
+  wifiEndpoint: typeof savedWifi.endpoint === 'string'
+    ? savedWifi.endpoint : '10.133.25.4:8086',
+});
+
+watch([() => serialDraft.wifiEndpoint, wifiAuto], ([endpoint, auto]) => {
+  try {
+    localStorage.setItem(wifiStorageKey, JSON.stringify({ endpoint, auto }));
+  } catch { /* Manual editing still works without persistent storage. */ }
+});
+
+function onWifiEdit() {
+  wifiAuto.value = false;
+  wifiIpError.value = '';
+}
+
+async function detectWifiIp(force = false) {
+  if (!wifiAutoSupported || wifiDetecting.value || (!force && !wifiAuto.value)) return;
+  if (force) wifiAuto.value = true;
+  const endpointBefore = serialDraft.wifiEndpoint;
+  wifiDetecting.value = true;
+  wifiIpError.value = '';
+  try {
+    const ip = isTauri() ? await invoke<string>('local_ipv4') : await getBrowserLocalIpv4();
+    // A late response must not replace an address the user has started editing.
+    if (!wifiAuto.value || serialDraft.wifiEndpoint !== endpointBefore) return;
+    const port = endpointBefore.split(':')[1] || '8086';
+    serialDraft.wifiEndpoint = `${ip}:${port}`;
+  } catch {
+    if (wifiAuto.value) wifiIpError.value = 'IP detection failed. Enter the PC IP manually.';
+  } finally {
+    wifiDetecting.value = false;
+  }
+}
+
+watch([open, activeChannel], ([isOpen, channel]) => {
+  if (isOpen && channel === 'wifi') void detectWifiIp();
 });
 
 function onConnect() {
