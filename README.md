@@ -83,34 +83,15 @@ src/
 
 ```bash
 npm install
-npm run vite       # 浏览器开发版，内置 WiFi SPI TCP/WebSocket 桥接
+npm run vite       # 浏览器开发
 npm run front      # 浏览器模拟数据演示
 npm run build:web  # 构建浏览器版
-npm run preview    # 预览构建结果，同样支持 WiFi SPI
+npm run preview    # 预览浏览器构建
 npm run test       # 运行测试
 npm run dev        # Tauri 桌面开发（需要 Rust/Cargo）
 npm run build      # Tauri 桌面打包
 npm run cap:sync   # 打包 APK
 ```
-
-## 浏览器 WiFi SPI 图传
-
-运行 `npm run vite`，打开终端显示的网页地址（默认 `http://localhost:5173`）。
-选择右上角 WIFI，确认电脑的局域网 IPv4 和端口（默认 8086），点击 Connect 开始监听，
-然后启动单片机。`Auto IP` 每次读取运行 Vite 的电脑网卡，可手动修改并保存。
-多网卡时选择与设备处于同一网络的 IP，并让固件的 `SETTING_WIFI_TARGET_IP` 和端口匹配。
-
-数据路径：WiFi SPI 模块 → 电脑 TCP 监听 → 同源 WebSocket → 原有图像解析器。
-不需要 Rust，不需要额外启动桥接进程，也不改 MCU 的 Theia 0xCC 图像协议。
-浏览器页面关闭或 Disconnect 会释放 TCP 监听；设备断开后保留监听，重连时清空半帧。
-同一时间只允许一个浏览器会话控制 WiFi 监听，避免重复接收和端口冲突。
-端口被占用、桥接不可用时页面会显示原因。
-
-网页可在运行 Vite 的电脑上访问，也可用同一局域网其他设备的浏览器访问
-`http://电脑IP:5173`；TCP 监听始终位于运行 Vite 的电脑上。
-必要时允许 Node.js 通过 Windows 防火墙接收设备连接。
-`npm run build:web` 后需用 `npm run preview` 提供网页和桥接；仅把 dist 放到静态站点不提供 TCP 接收能力。
-`npm run front` 使用模拟数据，实际图传请运行 `npm run vite`。
 
 ## 开发进度
 
