@@ -125,7 +125,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from "vue";
+import { computed, onMounted, onUnmounted, provide, ref, shallowRef, watch } from "vue";
 import { Icon } from "@iconify/vue";
 import SettingsView from "./SettingsView.vue";
 import HexView from "./HexView.vue";
@@ -133,6 +133,7 @@ import InversePerspectiveView from "./InversePerspectiveView.vue";
 import LogCard from "../components/LogCard.vue";
 import AvatarMenu from "../components/AvatarMenu.vue";
 import CliPanel from "../components/CliPanel.vue";
+import { useVisionRecording, visionRecordingKey } from "../composables/useVisionRecording";
 import VisionPane from "../components/VisionPane.vue";
 import BinOutputSimple from "../components/BinOutputSimple.vue";
 import SensorCard from "../components/SensorCard.vue";
@@ -147,6 +148,9 @@ import { RecordController } from "../serial/record";
 import type { RecordState } from "../serial/record";
 import type { ProcessedImageData } from "../serial/image-processor";
 import { serialManager as _sm } from "../composables/useTelemetry";
+
+const videoRecording = useVisionRecording();
+provide(visionRecordingKey, videoRecording);
 
 const replayCtrl = new ReplayController(_sm);
 const replayState = ref<ReplayState>('idle');
@@ -384,6 +388,7 @@ onMounted(() => {
   });
 });
 onUnmounted(() => {
+  videoRecording.dispose();
   window.removeEventListener("keydown", onKey);
   if (nowTimer) clearInterval(nowTimer);
   stopAnim();

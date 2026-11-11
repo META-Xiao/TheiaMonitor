@@ -3,15 +3,14 @@
     <header class="vision-header"><p>Perspective image workspace</p><h1>Vision</h1></header>
     <section class="workbench">
       <article class="stream-card">
-        <VisionPane ref="sourcePane" embedded :fps="fps" :image-size="sourceSize" :has-signal="!!frame">
-          <template #header-actions>
-            <button class="config-button" :class="{ active: calibration }" title="Import calibration JSON" @click="openConfig">
-              <Icon icon="lucide:sliders-horizontal" />
-            </button>
-          </template>
-        </VisionPane>
-        <VisionPane ref="outputPane" class="ipm-pane" embedded title="IPM" :fps="fps"
-          :image-size="outputSize" :has-signal="!!frame && !!ipmView" />
+        <header class="stream-toolbar">
+          <button class="config-button" :class="{ active: calibration }" title="Import calibration JSON"
+            :disabled="videoRecording?.recording.value" @click="openConfig"><Icon icon="lucide:sliders-horizontal" /></button>
+          <b>{{ fps > 0 ? fps.toFixed(1) + ' FPS' : '-- FPS' }}</b>
+        </header>
+        <VisionPane ref="sourcePane" embedded :show-fps="false" :fps="fps" :image-size="sourceSize" :has-signal="!!frame" />
+        <VisionPane ref="outputPane" class="ipm-pane" embedded title="IPM" :show-fps="false" :show-recording="false"
+          :fps="fps" :image-size="outputSize" :has-signal="!!frame && !!ipmView" />
       </article>
       <aside class="resource-card" aria-label="Vision resources" />
     </section>
@@ -41,8 +40,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
+import { computed, inject, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { Icon } from '@iconify/vue';
+import { visionRecordingKey } from '../composables/useVisionRecording';
 import VisionPane from '../components/VisionPane.vue';
 import type { ProcessedImageData } from '../serial/image-processor';
 import { expandedPerspectiveView, warpPerspectiveWithHomography, type HomographyMatrix } from '../utils/inversePerspective';
@@ -57,6 +57,9 @@ const sourcePane = ref<InstanceType<typeof VisionPane>>();
 const outputPane = ref<InstanceType<typeof VisionPane>>();
 const calibration = shallowRef<CalibrationConfig | null>(null);
 const ipmView = shallowRef<ReturnType<typeof expandedPerspectiveView>>(null);
+const videoRecording = inject(visionRecordingKey);
+videoRecording?.setSources(() => ({ source: sourcePane.value?.canvas,
+  ipm: ipmView.value ? outputPane.value?.canvas : undefined }));
 const smoothing = ref(true);
 const draftSmoothing = ref(true);
 const showConfig = ref(false);
@@ -169,7 +172,9 @@ onBeforeUnmount(() => cancelAnimationFrame(renderFrameId));
 .vision-header h1 { margin: 0; font-size: clamp(32px, 4vw, 48px); line-height: 1.04; letter-spacing: -.045em; }
 .workbench { flex: 1; min-height: 420px; display: grid; grid-template-columns: minmax(0, 1fr) clamp(200px, 18vw, 280px); gap: 18px; }
 .stream-card, .resource-card { min-width: 0; overflow: hidden; border: 1px solid var(--card-border); border-radius: 26px; background: var(--card-bg); box-shadow: var(--card-shadow); backdrop-filter: blur(22px); }
-.stream-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); padding: 8px; }
+.stream-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); padding: 8px; grid-template-rows: auto minmax(0, 1fr); }
+.stream-toolbar { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; padding: 6px 16px 0; color: var(--text-muted); font-size: 12px; }
+.config-button:disabled { opacity: .4; cursor: default; }
 .ipm-pane { border-left: 1px solid var(--card-border); }
 .config-button { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 1px solid var(--card-border); border-radius: 9px; background: var(--surface); color: var(--text-muted); cursor: pointer; }
 .config-button:hover, .config-button.active { color: #20b8a6; border-color: #20b8a6; }
