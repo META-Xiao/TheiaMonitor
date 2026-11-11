@@ -1,5 +1,5 @@
 use std::io::Read;
-use std::net::{TcpListener, TcpStream};
+use std::net::{TcpListener, TcpStream, UdpSocket};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use tauri::{Emitter, State};
@@ -7,6 +7,18 @@ use tauri::{Emitter, State};
 struct TcpState {
     writer: Arc<Mutex<Option<TcpStream>>>,
     stop: Arc<Mutex<bool>>,
+}
+
+// UDP connect only selects a route; no packet is sent to this address.
+#[tauri::command]
+fn local_ipv4() -> Result<String, String> {
+    let socket = UdpSocket::bind("0.0.0.0:0").map_err(|e| e.to_string())?;
+    socket.connect("8.8.8.8:80").map_err(|e| e.to_string())?;
+    let ip = socket.local_addr().map_err(|e| e.to_string())?.ip();
+    if ip.is_loopback() || ip.is_unspecified() {
+        return Err("No LAN IPv4 address available".into());
+    }
+    Ok(ip.to_string())
 }
 
 #[tauri::command]
@@ -68,7 +80,7 @@ fn tcp_is_connected(state: State<TcpState>) -> bool {
 pub fn run() {
     tauri::Builder::default()
         .manage(TcpState { writer: Arc::new(Mutex::new(None)), stop: Arc::new(Mutex::new(false)) })
-        .invoke_handler(tauri::generate_handler![tcp_listen, tcp_send, tcp_stop, tcp_is_connected])
+        .invoke_handler(tauri::generate_handler![local_ipv4, tcp_listen, tcp_send, tcp_stop, tcp_is_connected])
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(tauri_plugin_log::Builder::default().level(log::LevelFilter::Info).build())?;

@@ -26,6 +26,11 @@
       />
     </nav>
 
+    <div v-if="connectionError" class="connection-error" role="alert">
+      <span>{{ connectionError }}</span>
+      <button aria-label="Dismiss connection error" @click="connectionError = ''">×</button>
+    </div>
+
     <main v-show="activeTab === 0" class="main">
       <p class="hello">{{ greeting }}, Trace Vector!</p>
       <h1>Theia Monitor</h1>
@@ -267,12 +272,17 @@ function closePopups() {
   avatarMobileRef.value?.closePopups();
 }
 
+const connectionError = ref('');
+
 async function connectActive(channel: string, baud: number, wifiEndpoint: string) {
+  connectionError.value = '';
   console.log('[Overview] connectActive:', channel, baud, wifiEndpoint);
   try {
     if (channel === "wifi") {
       const [ip, portStr] = wifiEndpoint.split(':');
-      const port = parseInt(portStr) || 8086;
+      const port = Number(portStr || '8086');
+      if (!Number.isInteger(port) || port < 1024 || port > 65535)
+        throw new Error('TCP port must be an integer from 1024 to 65535.');
       console.log('[Overview] wifi connect to', ip, port);
       await serialManager.connectTcp(ip, port);
       console.log('[Overview] wifi connect OK');
@@ -285,6 +295,7 @@ async function connectActive(channel: string, baud: number, wifiEndpoint: string
         : `UART ${baud}`;
     }
   } catch (error) {
+    connectionError.value = error instanceof Error ? error.message : String(error);
     console.error("[Overview] Connect failed:", error);
   }
 }
@@ -397,6 +408,21 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.connection-error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 20px;
+  padding: 10px 14px;
+  border: 1px solid #ef4444;
+  border-radius: 10px;
+  color: var(--text);
+  background: var(--card-bg);
+  font-size: 13px;
+}
+.connection-error span { flex: 1; }
+.connection-error button { border: 0; background: transparent; color: inherit; font-size: 20px; cursor: pointer; }
+
 .page {
   height: 100vh;
   overflow-y: auto;

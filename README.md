@@ -83,11 +83,13 @@ src/
 
 ```bash
 npm install
-npm run dev        # 开发服务器
+npm run vite       # 浏览器开发
+npm run front      # 浏览器模拟数据演示
+npm run build:web  # 构建浏览器版
+npm run preview    # 预览浏览器构建
 npm run test       # 运行测试
-npm run build      # Web 构建
-npm run tauri:dev  # Tauri 桌面开发
-npm run tauri:build# 打包 EXE
+npm run dev        # Tauri 桌面开发（需要 Rust/Cargo）
+npm run build      # Tauri 桌面打包
 npm run cap:sync   # 打包 APK
 ```
 
