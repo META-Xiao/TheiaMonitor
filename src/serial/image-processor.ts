@@ -1,5 +1,12 @@
 import { ImageFrame, PixelFormat, Codec } from './protocol';
 
+export interface CoordinateBoundary {
+  space: 'image' | 'ipm';
+  color: number;
+  points: { x: number; y: number }[];
+}
+
+
 /**
  * 图像处理配置
  */
@@ -18,6 +25,7 @@ export interface ProcessedImageData {
   height: number;         // 高度
   pixelData: Uint8ClampedArray;  // RGBA 格式像素数据
   timestamp: number;      // 时间戳（ms）
+  boundaries?: CoordinateBoundary[]; // 独立坐标层，保留原始灰度以便重新投影
 }
 
 /**
@@ -49,10 +57,10 @@ export class ImageFrameProcessor {
     let raw: Uint8Array;
     if (codec === Codec.RAW) {
       raw = payload;
-    } else if (codec === Codec.SparseBoundary) {
+    } else if (codec === Codec.SparseBoundary || codec === Codec.CoordinateBoundary) {
       /* SparseBoundary: 仅 Binary1(0) / Gray8(1) 有效 */
       if (pixelFormat !== PixelFormat.Binary1 && pixelFormat !== PixelFormat.Gray8) {
-        throw new Error(`SparseBoundary only supports Binary1/Gray8, got ${PixelFormat[pixelFormat]}`);
+        throw new Error(`Boundary codec only supports Binary1/Gray8, got ${PixelFormat[pixelFormat]}`);
       }
       const imgSize = this.expectedRawSize(pixelFormat, width, height);
       raw = payload.slice(0, imgSize);
@@ -70,7 +78,7 @@ export class ImageFrameProcessor {
     }
 
     // 3. 缓存参考帧
-    if (codec === Codec.RAW || codec === Codec.Tile || codec === Codec.Patch || codec === Codec.SparseBoundary) {
+    if (codec === Codec.RAW || codec === Codec.Tile || codec === Codec.Patch || codec === Codec.SparseBoundary || codec === Codec.CoordinateBoundary) {
       this.iFrameCache = raw;
     }
 
@@ -91,6 +99,9 @@ export class ImageFrameProcessor {
       timestamp: performance.now(),
     };
 
+    if (codec === Codec.CoordinateBoundary) {
+      processed.boundaries = decodeCoordinateBoundaries(payload.subarray(expected));
+    }
     this.lastProcessedFrame = processed;
     return processed;
   }
@@ -265,6 +276,29 @@ export class ImageFrameProcessor {
   clear(): void {
     this.lastProcessedFrame = null;
   }
+}
+
+/** Codec8: Count + [Space:u8, RGB565:u16BE, Count:u8, (X:i16BE,Y:i16BE)*Count] */
+function decodeCoordinateBoundaries(data: Uint8Array): CoordinateBoundary[] {
+  if (!data.length) throw new Error('Missing coordinate boundary section');
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  const lines: CoordinateBoundary[] = [];
+  let offset = 1;
+  for (let i = 0; i < data[0]; i++) {
+    if (offset + 4 > data.length) throw new Error('Truncated coordinate boundary header');
+    const space = data[offset++];
+    if (space > 1) throw new Error('Unknown boundary coordinate space');
+    const color = view.getUint16(offset); offset += 2;
+    const count = data[offset++];
+    if (offset + count * 4 > data.length) throw new Error('Truncated coordinate boundary points');
+    const points = [];
+    for (let j = 0; j < count; j++, offset += 4) {
+      points.push({ x: view.getInt16(offset), y: view.getInt16(offset + 2) });
+    }
+    lines.push({ space: space === 0 ? 'image' : 'ipm', color, points });
+  }
+  if (offset !== data.length) throw new Error('Trailing coordinate boundary data');
+  return lines;
 }
 
 /**

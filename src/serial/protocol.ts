@@ -42,6 +42,7 @@ export enum Codec {
   TileHEATSHRINK  = 5, // Tile + HEATSHRINK 复合 (P帧)
   PatchHEATSHRINK = 6, // Patch + HEATSHRINK 复合 (P帧)
   SparseBoundary  = 7, // 灰度/二值 + 边界坐标分离 (PixelFormat 0/1 专用)
+  CoordinateBoundary = 8, // RAW + 带坐标空间标记的int16 XY点列
 }
 
 /**

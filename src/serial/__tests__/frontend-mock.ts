@@ -5,9 +5,46 @@ import { PixelFormat, Codec, makeFormat } from '../protocol';
  * 前端开发用 mock：通过真实的 TelemetrySerialManager.emit() 注入帧，
  * 驱动 ResourceManager / LogProcessManager，与硬件接入时数据流完全一致。
  */
-const GRAY_PAYLOAD = new Uint8Array(188 * 120); // 灰度全黑占位图
+const MOCK_WIDTH = 188;
+const MOCK_HEIGHT = 120;
+const GRAY_PAYLOAD = createRoadTestPattern();
 let mockFrameId = 0;
 const DEFAULT_FORMAT = makeFormat(PixelFormat.Gray8, Codec.RAW);
+
+/** Perspective road pattern used to verify the Vision homography in front mode. */
+function createRoadTestPattern(): Uint8Array {
+  const pixels = new Uint8Array(MOCK_WIDTH * MOCK_HEIGHT);
+  const horizon = 45;
+  const centerX = MOCK_WIDTH / 2;
+
+  for (let y = 0; y < MOCK_HEIGHT; y++) {
+    const depth = Math.max(0, (y - horizon) / (MOCK_HEIGHT - 1 - horizon));
+    const roadHalfWidth = 26 + depth * 58;
+    const leftEdge = centerX - roadHalfWidth;
+    const rightEdge = centerX + roadHalfWidth;
+    const laneHalfWidth = 2 + depth * 2;
+    const edgeThickness = 1 + depth * 2;
+
+    for (let x = 0; x < MOCK_WIDTH; x++) {
+      let value: number;
+      if (y < horizon) {
+        value = 72 + Math.floor((y / horizon) * 34);
+      } else if (x < leftEdge || x > rightEdge) {
+        value = 48 + (((x >> 3) + (y >> 3)) & 1) * 12;
+      } else {
+        value = 28 + Math.floor(depth * 16);
+        const edgeDistance = Math.min(Math.abs(x - leftEdge), Math.abs(x - rightEdge));
+        if (edgeDistance < edgeThickness) value = 220;
+
+        const dashBand = Math.floor((y - horizon) / Math.max(4, 11 - depth * 6));
+        if (Math.abs(x - centerX) < laneHalfWidth && dashBand % 2 === 0) value = 238;
+      }
+      pixels[y * MOCK_WIDTH + x] = value;
+    }
+  }
+
+  return pixels;
+}
 
 export function startFrontendMock(serialManager: TelemetrySerialManager): () => void {
   let t = 0;
@@ -22,7 +59,7 @@ export function startFrontendMock(serialManager: TelemetrySerialManager): () => 
     () => `${ts()} [WARN] Frame drop detected`,
   ];
 
-  // IMAGE 帧 @25fps (灰度 188×120, RAW codec)
+  // IMAGE 帧 @25fps (灰度透视道路测试图, RAW codec)
   const imageTimer = setInterval(() => {
     serialManager.emit({
       type: 'FRAME',
@@ -30,8 +67,8 @@ export function startFrontendMock(serialManager: TelemetrySerialManager): () => 
         type: 'IMAGE',
         frameId: mockFrameId++ & 0xFFFF,
         length: 5 + GRAY_PAYLOAD.length,  // Frame(2)+W(1)+H(1)+Fmt(1)+Payload
-        width: 188,
-        height: 120,
+        width: MOCK_WIDTH,
+        height: MOCK_HEIGHT,
         format: DEFAULT_FORMAT,
         pixelFormat: PixelFormat.Gray8,
         codec: Codec.RAW,

@@ -1,11 +1,12 @@
 <template>
-  <div class="vision-pane">
+  <div class="vision-pane" :class="{ embedded, fill }">
     <div class="pane-head">
-      <span>Vision stream</span>
-      <b>{{ fps > 0 ? fps.toFixed(1) + ' FPS' : '-- FPS' }}</b>
+      <span>{{ title }}</span>
+      <div v-if="showFps" class="pane-actions"><b>{{ fps > 0 ? fps.toFixed(1) + ' FPS' : '-- FPS' }}</b></div>
     </div>
     <div class="canvas-wrap">
       <canvas ref="canvasEl" width="188" height="120" />
+      <div v-if="!hasSignal" class="no-signal">NO SIGNAL</div>
     </div>
     <div class="vision-foot">
       <span>{{ imageSize.w > 0 ? `Source ${imageSize.w}×${imageSize.h}` : 'Source --×--' }}</span>
@@ -16,19 +17,7 @@
         <button class="ctrl-btn" @click="takeScreenshot" title="Screenshot">
           <Icon icon="lucide:camera" />
         </button>
-        <template v-if="!recording">
-          <button class="ctrl-btn" @click="startRecord" title="Record">
-            <Icon icon="lucide:video" />
-          </button>
-        </template>
-        <template v-else>
-          <button class="ctrl-btn recording" @click="pauseRecord" :title="paused ? 'Resume' : 'Pause'">
-            <Icon :icon="paused ? 'lucide:play' : 'lucide:pause'" />
-          </button>
-          <button class="ctrl-btn stop" @click="stopRecord" title="Stop & Save">
-            <Icon icon="lucide:square" />
-          </button>
-        </template>
+        <VideoRecordControls v-if="showRecording" :has-signal="hasSignal" />
       </div>
     </div>
   </div>
@@ -37,11 +26,18 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { Icon } from '@iconify/vue';
+import VideoRecordControls from './VideoRecordControls.vue';
 
-const props = defineProps<{
+withDefaults(defineProps<{
   fps: number;
   imageSize: { w: number; h: number };
-}>();
+  title?: string;
+  embedded?: boolean;
+  fill?: boolean;
+  hasSignal?: boolean;
+  showFps?: boolean;
+  showRecording?: boolean;
+}>(), { title: 'Vision stream', embedded: false, fill: false, hasSignal: true, showFps: true, showRecording: true });
 
 const canvasEl = ref<HTMLCanvasElement>();
 const feedPaused = ref(false);
@@ -55,46 +51,6 @@ function takeScreenshot() {
   a.download = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}.png`;
   a.href = c.toDataURL('image/png');
   a.click();
-}
-
-const recording = ref(false);
-const paused = ref(false);
-let recorder: MediaRecorder | null = null;
-let chunks: Blob[] = [];
-
-function startRecord() {
-  const c = canvasEl.value;
-  if (!c) return;
-  const stream = c.captureStream(25);
-  const mime = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
-  recorder = new MediaRecorder(stream, { mimeType: mime });
-  chunks = [];
-  recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
-  recorder.onstop = () => {
-    const blob = new Blob(chunks, { type: mime });
-    const a = document.createElement('a');
-    const now = new Date();
-    const pad = (n: number) => String(n).padStart(2, '0');
-    a.download = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}.${mime.includes('mp4') ? 'mp4' : 'webm'}`;
-    a.href = URL.createObjectURL(blob);
-    a.click();
-    URL.revokeObjectURL(a.href);
-  };
-  recorder.start(100);
-  recording.value = true;
-  paused.value = false;
-}
-
-function pauseRecord() {
-  if (!recorder) return;
-  if (paused.value) { recorder.resume(); paused.value = false; }
-  else { recorder.pause(); paused.value = true; }
-}
-
-function stopRecord() {
-  recorder?.stop();
-  recording.value = false;
-  paused.value = false;
 }
 
 defineExpose({
@@ -158,7 +114,7 @@ defineExpose({
   display: flex;
   gap: 8px;
 }
-.ctrl-btn {
+.vision-controls :deep(.ctrl-btn) {
   width: 36px;
   height: 36px;
   border-radius: 999px;
@@ -172,9 +128,20 @@ defineExpose({
   font-size: 16px;
   transition: background 150ms, color 150ms;
 }
-.ctrl-btn:hover { background: var(--surface); }
-.ctrl-btn.recording { color: #f59e0b; }
-.ctrl-btn.stop { color: #ef4444; }
+.vision-controls :deep(.ctrl-btn:hover) { background: var(--surface); }
+.vision-controls :deep(.ctrl-btn.recording) { color: #f59e0b; }
+.vision-controls :deep(.ctrl-btn.stop) { color: #ef4444; }
+
+.pane-actions { display: flex; align-items: center; gap: 10px; }
+.no-signal { position: absolute; inset: 0; display: grid; place-items: center; color: var(--text-dim); font: 700 13px "JetBrains Mono", monospace; letter-spacing: .15em; }
+.vision-pane.embedded { height: auto; min-height: 420px; border: 0; border-radius: 0; background: transparent; box-shadow: none; backdrop-filter: none; }
+.embedded .canvas-wrap { inset: 58px 12px 64px; border-radius: 12px; }
+.embedded canvas { border-radius: 0; }
+.fill .canvas-wrap canvas { object-fit: fill; }
+.fill.embedded .canvas-wrap { inset: 42px 4px 48px; }
+.embedded .vision-foot { flex-wrap: wrap; gap: 8px; font-size: 10px; }
+.embedded .vision-controls :deep(.ctrl-btn) { width: 28px; height: 28px; font-size: 14px; }
+.embedded .vision-controls { gap: 5px; }
 
 @media (max-width: 1280px) {
   .vision-pane { height: 420px; }
