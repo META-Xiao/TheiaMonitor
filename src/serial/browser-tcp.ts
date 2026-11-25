@@ -1,6 +1,6 @@
 export async function getBrowserLocalIpv4(): Promise<string> {
   const response = await fetch('/__theia_wifi/network', { cache: 'no-store' });
-  if (!response.ok) throw new Error('WiFi bridge is unavailable. Start Theia with npm run vite.');
+  if (!response.ok) throw new Error('WiFi bridge is unavailable. Start Theia with npm run web.');
   const info = await response.json();
   if (typeof info.ip !== 'string' || !info.ip) throw new Error('No LAN IPv4 address was found.');
   return info.ip;
@@ -34,9 +34,9 @@ export class BrowserTcpPort {
         if (!settled) { settled = true; clearTimeout(timeout); reject(new Error(message)); }
         socket.close();
       };
-      const timeout = setTimeout(() => fail('WiFi bridge did not respond. Start Theia with npm run vite.'), 8000);
+      const timeout = setTimeout(() => fail('WiFi bridge did not respond. Start Theia with npm run web.'), 8000);
       socket.onopen = () => socket.send(JSON.stringify({ type: 'listen', port }));
-      socket.onerror = () => fail('Cannot reach the WiFi bridge. Start Theia with npm run vite.');
+      socket.onerror = () => fail('Cannot reach the WiFi bridge. Start Theia with npm run web.');
       socket.onmessage = event => {
         if (this.socket !== socket) return;
         if (typeof event.data !== 'string') {

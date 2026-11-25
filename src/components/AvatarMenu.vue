@@ -98,7 +98,7 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
-import { invoke, isTauri } from '@tauri-apps/api/core';
+import { getDesktopBridge } from '../desktop';
 import { getBrowserLocalIpv4 } from '../serial/browser-tcp';
 import { Icon } from '@iconify/vue';
 import { conn } from '../stores/connection';
@@ -156,7 +156,7 @@ try {
   if (saved && typeof saved === 'object') savedWifi = saved;
 } catch { /* Storage may be unavailable in a browser. */ }
 
-const wifiAutoSupported = isTauri() || typeof fetch === 'function';
+const wifiAutoSupported = Boolean(getDesktopBridge()) || typeof fetch === 'function';
 const wifiAuto = ref(savedWifi.auto !== false);
 const wifiDetecting = ref(false);
 const wifiIpError = ref('');
@@ -184,7 +184,8 @@ async function detectWifiIp(force = false) {
   wifiDetecting.value = true;
   wifiIpError.value = '';
   try {
-    const ip = isTauri() ? await invoke<string>('local_ipv4') : await getBrowserLocalIpv4();
+    const desktop = getDesktopBridge();
+    const ip = await (desktop ? desktop.localIpv4() : getBrowserLocalIpv4());
     // A late response must not replace an address the user has started editing.
     if (!wifiAuto.value || serialDraft.wifiEndpoint !== endpointBefore) return;
     const port = endpointBefore.split(':')[1] || '8086';

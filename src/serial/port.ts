@@ -1,4 +1,5 @@
-import { FRAME_TYPE, FRAME_SIZE } from './protocol';
+import { getDesktopBridge } from '../desktop';
+import { BrowserTcpPort } from './browser-tcp';
 
 /**
  * WebSerial API 类型定义
@@ -136,8 +137,10 @@ export class SerialPortManager {
     }
 
     if (this.reader) {
-      await this.reader.cancel();
+      const reader = this.reader;
       this.reader = null;
+      try { await reader.cancel(); }
+      finally { reader.releaseLock(); }
     }
 
     if (this.port && this.isOpen) {
@@ -190,8 +193,8 @@ export class SerialPortManager {
 
     try {
       const writer = this.port.writable.getWriter();
-      await writer.write(data);
-      writer.releaseLock();
+      try { await writer.write(data); }
+      finally { writer.releaseLock(); }
     } catch (error) {
       throw new Error(`Failed to write to serial port: ${error}`);
     }
@@ -212,64 +215,72 @@ export class SerialPortManager {
   }
 }
 
-// ── Tauri TCP (v2 API) ─────────────────────────────────────────────
-import { invoke, isTauri } from '@tauri-apps/api/core';
-import { BrowserTcpPort } from './browser-tcp';
-import { listen } from '@tauri-apps/api/event';
-
 /**
- * TCP 端口管理器 (通过 Tauri Rust 后端 std::net::TcpStream)
+ * TCP 端口管理器：桌面走 Electron IPC，网页走 Vite WiFi 桥接。
  *
  * 接口与 SerialPortManager 对齐，TelemetrySerialManager 可无感切换。
  */
 export class TcpPortManager {
   private browserPort = new BrowserTcpPort();
   private streamResetCallback: (() => void) | null = null;
-  private unlistenClientConnected: (() => void) | null = null;
+  private unlisten: (() => void) | null = null;
   private isOpen = false;
   private readCallbacks: Array<(data: Uint8Array) => void> = [];
   private disconnectedCallback: (() => void) | null = null;
-  private unlistenDisconnect: (() => void) | null = null;
-  private unlistenData: (() => void) | null = null;
-
-  static isSupported(): boolean { return isTauri() || BrowserTcpPort.isSupported(); }
+  static isSupported(): boolean { return Boolean(getDesktopBridge()) || BrowserTcpPort.isSupported(); }
 
   async connect(ip: string, port: number): Promise<void> {
-    if (!isTauri()) return this.browserPort.connect(ip, port);
-    await invoke('tcp_listen', { port });
-    this.isOpen = true;
-    this.unlistenClientConnected = await listen('tcp-client-connected', () => this.streamResetCallback?.());
-    this.unlistenData = await listen<number[]>('tcp-data', (event) => {
-      const data = new Uint8Array(event.payload);
-      for (const cb of this.readCallbacks) {
-        try { cb(data); } catch (e) { console.error(e); }
+    const desktop = getDesktopBridge();
+    if (!desktop) return this.browserPort.connect(ip, port);
+    if (this.unlisten) throw new Error('A WiFi listener is already active.');
+    const unlisten = desktop.onTcpEvent((type, data) => {
+      if (type === 'client-connected') this.streamResetCallback?.();
+      else if (type === 'data' && data) {
+        for (const cb of this.readCallbacks) {
+          try { cb(data); } catch (e) { console.error(e); }
+        }
+      } else if (type === 'listener-closed' && this.unlisten === unlisten) {
+        this.unlisten = null;
+        this.isOpen = false;
+        unlisten();
+        this.disconnectedCallback?.();
       }
     });
-    this.unlistenDisconnect = await listen('tcp-disconnected', () => {
-      console.log('[TcpPort] tcp-disconnected event');
-      this.isOpen = false;
-      if (this.disconnectedCallback) this.disconnectedCallback();
-    });
+    this.unlisten = unlisten;
+    try {
+      await desktop.tcpListen(port);
+      if (this.unlisten !== unlisten) throw new Error('WiFi listener closed during startup.');
+      this.isOpen = true;
+    } catch (error) {
+      if (this.unlisten === unlisten) {
+        this.unlisten = null;
+        unlisten();
+      }
+      throw error;
+    }
   }
 
   async close(): Promise<void> {
-    if (!isTauri()) return this.browserPort.close();
-    console.log('[TcpPort] close');
-    if (this.unlistenClientConnected) { this.unlistenClientConnected(); this.unlistenClientConnected = null; }
-    if (this.unlistenData) { this.unlistenData(); this.unlistenData = null; }
-    if (this.unlistenDisconnect) { this.unlistenDisconnect(); this.unlistenDisconnect = null; }
-    try { await invoke('tcp_stop'); } catch {}
+    const desktop = getDesktopBridge();
+    if (!desktop) return this.browserPort.close();
+    const unlisten = this.unlisten;
+    this.unlisten = null;
     this.isOpen = false;
+    if (unlisten) {
+      unlisten();
+      await desktop.tcpStop();
+    }
   }
 
   async write(data: Uint8Array): Promise<void> {
-    if (!isTauri()) return this.browserPort.write(data);
-    console.log('[TcpPort] write', data.length, 'bytes');
-    await invoke('tcp_send', { data: Array.from(data) });
+    const desktop = getDesktopBridge();
+    if (!desktop) return this.browserPort.write(data);
+    if (!this.isOpen) throw new Error('WiFi listener is not open.');
+    await desktop.tcpSend(data);
   }
 
   onData(cb: (data: Uint8Array) => void): void { this.readCallbacks.push(cb); this.browserPort.onData(cb); }
   onDisconnect(cb: () => void): void { this.disconnectedCallback = cb; this.browserPort.onDisconnect(cb); }
   onStreamReset(cb: () => void): void { this.streamResetCallback = cb; this.browserPort.onStreamReset(cb); }
-  getIsOpen(): boolean { return isTauri() ? this.isOpen : this.browserPort.getIsOpen(); }
+  getIsOpen(): boolean { return getDesktopBridge() ? this.isOpen : this.browserPort.getIsOpen(); }
 }

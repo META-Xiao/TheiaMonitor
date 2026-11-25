@@ -1,448 +1,154 @@
-# 图传混合协议设计文档
+# Theia Monitor 遥测协议
 
-## 1. 协议概览
+## 1. 连接方式
 
-**目标**：统一传输图像、日志、资源信息，供上位机实时显示与分析
+MCU 发给上位机的图像、日志、资源数据和命令应答共用一条字节流。USB-CDC、UART 和 Wi‑Fi TCP 使用相同的帧格式。
 
-**通道配置**
-- 波特率: xxxxx bps，帧格式 8N1
-- 通道: USB-CDC / UART（无线转串口）
-- 编码: 二进制多帧混合协议
+| 通道 | 连接方法 |
+| --- | --- |
+| USB-CDC / UART | 在上位机选择串口。物理 UART 用 8N1，默认波特率为 115200 bps，按固件配置调整。 |
+| Wi‑Fi TCP | 上位机监听指定端口（默认 `8086`），MCU 主动连接电脑的局域网 IP 和该端口。可选端口为 `1024–65535`。 |
 
----
+Electron 桌面版直接监听 TCP；网页开发版用 `npm run web` 启动后，由 Vite 上的 Wi‑Fi 桥接监听。MCU 不需要实现 WebSocket，也不需要为桌面版增加一层封包。TCP 一次读取可能只得到半帧，也可能得到多帧，接收端按 `Length` 拼帧。
 
-## 2. 帧类型定义
+## 2. 公共帧格式
 
-### 2.1 图传帧 (0xCC) 
-
-```
-┌─────┬────────┬───────┬───────┬─────────┬─────────┬───────────┬───────┐
-│ ID  │ Length │ Frame │ Width │ Height  │ Format  │ Payload   │ CRC8  |
-├─────┼────────┼───────┼───────┼─────────┼─────────┼───────────┼───────┤
-│ 0xCC│ (2B)   │ (2B)  │ (1B)  │ (1B)    │ (1B)    │ xxB       | (1B)  │
-└─────┴────────┴───────┴───────┴─────────┴─────────┴───────────┴───────┘
+```text
+| Sync (1 B) | Length (2 B, u16 大端) | Body (Length B) | Checksum (1 B) |
 ```
 
-**字段说明** ：
-- `Length`: 该数据帧内容长度（去掉帧头和校验和`CRC8`的数据长度），Host用于确定边界
-- `Frame`: 帧计数器（0-65535，u16），上位机通过 Frame 增量 + 时间戳即可评估接收帧率
-- `Width`: 图像宽度（像素，u8）
-- `Height`: 图像高度（像素，u8）
-- `Format`: 高4位表示PixelFormat `Payload` 原始像素数据格式（u8），低4位表示Codec 对于该格式下的编码方式  
+`Length` 只计 `Body`，不含帧头、长度字段和校验和。整帧长度为 `Length + 4` 字节。校验和是从 `Sync` 到 `Body` 末尾的所有字节之和，取低 8 位；这是累加校验，不是 CRC-8。
 
-    **PixelFormat**:
-
-    | 值 | 名称 | 说明 |
-    |----|------|------|
-    | `0` | Binary1 | 二值化图（1bpp），每8像素打包为1B，常用于巡线/阈值化图像 |
-    | `1` | Gray8 | 灰度图（8bpp） |
-    | `2` | RGB565 | 彩色图（16bpp），大端序：`RRRRRGGG GGGBBBBB` |
-    | `3` | RGB888 | 真彩色图（24bpp），顺序：R G B |
-    | `4` | YUV422 | 色度抽样格式（16bpp），每2像素共享一组UV，常用于摄像头原始输出 |
-    | `5` | JPEG | 有损压缩图像，Payload 为完整 JPEG 数据流 |
-    | `6` | PNG | 无损压缩图像，Payload 为完整 PNG 数据流 |
-    | `7` | UserDefined | 用户自定义格式，上位机通过插件/脚本解析 |
-
-    **Codec**:
-
-    | 值 | 名称 | 说明 |
-    |----|------|------|
-    | `0` | RAW | 按 PixelFormat 格式输出的完整原始图像，不做任何压缩 |
-    | `1` | RLE | 游程编码，连续相同数据压缩为 `<val, len>` 对，适合二值化图和灰度图 |
-    | `2` | HEATSHRINK | 面向MCU的小型LZ压缩算法，支持Streaming，RAM占用低（不代表没有占用，至少8KB的占用是存在的，而且对CPU要求也有不小要求） |
-    | `3` | Tile | 变化检测：分块对比I/P帧，仅传输变化区块（无熵编码，调试用） |
-    | `4` | Patch | 变化检测：最小矩形覆盖变化区域，传矩形内RAW数据（无熵编码，调试用） |
-    | `5` | Tile+HEATSHRINK | Tile 变化检测后 HEATSHRINK 压缩变化区块数据 |
-    | `6` | Patch+HEATSHRINK | Patch 变化检测后 HEATSHRINK 压缩矩形内数据 |
-    | `7` | SparseBoundary | 灰度/二值底图 + 边界坐标分离传输（PixelFormat 0/1 专用） |
-    | `8` | CoordinateBoundary | RAW 底图 + 带空间标记的有符号 XY 点列 |
-
-    **Codec 8 — CoordinateBoundary**（PixelFormat 0/1，MOD2）：
-
-    `Payload = RAW图像 + LineCount:u8 + 各条点列`。
-    每条点列为 `Space:u8 + Color:u16BE(RGB565) + Count:u8 + (X:i16BE,Y:i16BE) × Count`。
-    Space=0 为原图坐标，Space=1 为标定矩阵输出的 IPM 坐标，均非扩展画布坐标。
-    无效点省略，Count=0 清除该条线；每帧独立，不依赖上一帧。
-    MOD2 只发选中的红色左边或蓝色右边，以及绿色 IPM 中线。
-    原图视图用 H⁻¹ 回投中线；IPM 视图对原图边界用 H，中线只加画布偏移。
-    MCU 与上位机必须使用同一 H；显示裁切、拉伸不改变传输坐标。
-    MOD1 继续使用 Codec7 及 0xFF 隐藏规则。
-
-    **Codec 3 — Tile 编码格式**：
-
-    将图像按 `CutInfo` 指定的网格划分，比较 I/P 帧找出变化的区块，Payload 格式：
-
-    ```
-    | Sum  | CutInfo | BlockID | Data | BlockID | Data | ... |
-    | 1B   | 1B      | 1B      | ...  | 1B      | ...  | ... |
-    ```
-
-    - `Sum`（1B）：变化区块的数量
-    - `CutInfo`（1B）：高4位=height划分数，低4位=width划分数。最大 16×16=256 块
-    - `BlockID`（1B）：变化区块的一维下标（行优先，0-255）
-    - `Data`：该区块的RAW像素数据，每个区块尺寸 = `(W/块数_w) × (H/块数_h) × bpp`
-
-    **Codec 4 — Patch 编码格式**：
-
-    找到覆盖所有变化像素的最小矩形，Payload 格式：
-
-    ```
-    | x1 | y1 | x2 | y2 | Data |
-    | 1B | 1B | 1B | 1B | ...  |
-    ```
-
-    - `(x1, y1)`：变化矩形左上角坐标（含）
-    - `(x2, y2)`：变化矩形右下角坐标（含）
-    - `Data`：矩形内RAW像素数据，行优先，尺寸 = `(x2-x1+1) × (y2-y1+1) × bpp`
-
-    **Codec 5/6 — 复合编码**：
-
-    Codec 5（Tile+HEATSHRINK）：Tile 变化检测 → 拼接变化区块 → HEATSHRINK 压缩。
-    Codec 6（Patch+HEATSHRINK）：Patch 变化检测 → 拼接变化矩形 → HEATSHRINK 压缩。
-
-    **Codec 7 — SparseBoundary 编码**（仅 PixelFormat 0/1）：
-
-    灰度或二值化底图与赛道边界坐标**分离传输**。Host 收到后在灰度图上渲染彩色边界线。
-
-    **适用 PixelFormat**: `Binary1` (0), `Gray8` (1)
-
-    **Payload 格式**:
-
-    ```
-    | ImageData  | LineCount | [Color | Count | X[0]...X[Count-1] ] × N |
-    | raw pixels | 1B        | 2B RGB565 BE | 1B | 1B each               |
-    ```
-
-    - `ImageData`: 按 PixelFormat 的原始像素数据（Gray8 = W×H B, Binary1 = ceil(W×H/8) B）
-    - `LineCount`: 边界线数量（0-255，0 表示纯底图无标注）
-    - `Color`: RGB565 大端，该线的绘制颜色
-    - `Count`: 坐标点数（通常 = 图像高度 H）
-    - `X[i]`: 第 i 行的 X 坐标（Y 隐式 = i，坐标 < 255 用 8-bit）
-
-    **188×120 示例**（3 线 左红/中绿/右蓝）：
-
-    | 部分 | 大小 |
-    |------|------|
-    | ImageData (Gray8) | 22,560 B |
-    | LineCount | 1 B |
-    | 左线 (Color+Count+120X) | 123 B |
-    | 中线 | 123 B |
-    | 右线 | 123 B |
-    | **总 Payload** | **22,930 B** |
-
-    > 相比 RGB565 RAW 的 45,120 B 减半。结合 Tile (8.2) 可进一步压缩。
-
-    > **I/P 帧机制**：上位机始终缓存上一有效帧的 RAW 数据。P 帧（Codec 3/4/5）依赖 I 帧解码，I 帧丢失时上位机丢弃后续 P 帧直至收到新 I 帧（通常定期插入）。
-
----
-
-### 2.2 日志帧 (0xDD)
-
-**帧结构**:
-```
-┌─────┬────────┬────────────┬──────────┐
-│ ID  │ Length │ LogData    │ Checksum │
-├─────┼────────┼────────────┼──────────┤
-│ 0xDD│ (2B)   │ (0-256B)   │ (1B)     │
-└─────┴────────┴────────────┴──────────┘
+```text
+Checksum = (Sync + LengthHi + LengthLo + sum(Body)) & 0xFF
 ```
 
-**字段说明**:
-- `Length`: 日志数据字节数（u16）
-- `LogData`: UTF-8 文本内容
-- `Checksum`: 校验和，所有字节和 & 0xFF 的结果（含帧头 0xDD）
+| Sync | 类型 | Body | Length（字节） |
+| --- | --- | --- | --- |
+| `0xCC` | 图传 | `FrameID + Width + Height + Format + Payload` | `5 + Payload 大小`，上限 `65535` |
+| `0xDD` | 日志 | UTF-8 文本 | `0–256` |
+| `0xEE` | 资源 | 按双方配置排列的字段 | 等于数据大小；默认布局为 `9` |
+| `0xFF` | CLI 应答 | `Flags + UTF-8 文本` | 建议发 `1–256`；当前解析器兼容到 `257` |
 
-**总字节数**: 4 + N（N=0-256）  
-**上位机处理**: 文本解析->控制台显示
+上位机先查找这四种帧头，再按长度读取剩余字节。帧体里的 `0xCC`、`0xDD`、`0xEE`、`0xFF` 是普通数据，不另起一帧。校验失败时丢弃该帧，从下一个未读字节继续找帧头；如果 `Length` 本身损坏，中间的帧也可能一起被跳过。用中断、DMA 或任务并行发送时，应让每一帧完整进入发送队列，避免不同帧的字节交错。
 
----
+## 3. 图传帧 `0xCC`
 
-### 2.3 资源帧 (0xEE)
-
-**帧结构**:
-
-这里资源帧使用高度自定义的字段，可以根据需求扩展。
-
-```
-┌─────┬──────────┬──────────┬──────────┬────────────┬──────────────┬──────────┐
-│ ID  │ Length   │ Block1   │ Block2   │ Block3     │ ...          │ Checksum │
-├─────┼──────────┼──────────┼──────────┼────────────┼──────────────┼──────────┤
-│ 0xEE│ (2B)     │ (2B u16) │ (2B u16) │ (2B i16)   │ (xB xxx)     │ (1B)     │
-└─────┴──────────┴──────────┴──────────┴────────────┴──────────────┴──────────┘
+```text
+Body = FrameID:u16BE + Width:u8 + Height:u8 + Format:u8 + Payload
 ```
 
-这里资源帧内的划分块，可以根据需求扩展，然后在上位机的Settings -> Resources 中配置就行。
+`FrameID` 从 `65535` 回绕到 `0`，上位机可用它检查丢帧。`Width` 和 `Height` 以像素为单位。`Format` 的高 4 位是 `PixelFormat`，低 4 位是 `Codec`。例如 `0x18` 表示 Gray8 + CoordinateBoundary。`Payload` 最多 `65530` 字节。
 
-**字段说明**：
+| PixelFormat | 名称 | 字节布局与支持情况 |
+| --- | --- | --- |
+| `0` | Binary1 | 行优先，每 8 个像素占 1 字节，先用高位；整图占 `ceil(W × H / 8)` 字节。 |
+| `1` | Gray8 | 每像素 1 字节。 |
+| `2` | RGB565 | 每像素 2 字节，大端序。 |
+| `3` | RGB888 | 每像素依次发送 R、G、B。 |
+| `4` | YUV422 | 每像素占 2 字节；当前上位机只读取偶数下标的 Y 分量，按灰度显示。 |
+| `5` / `6` / `7` | JPEG / PNG / UserDefined | 编号已定义，当前上位机不解码。 |
 
-- `Length`: 资源数据字节数（uint16 大端，最大 256），即帧头之后、校验和之前的总字节数，不包括帧头、Length 字段和校验和。例如这个就是 $(6+x)B$
-- `Block1`: 资源数据块1（uint16 大端）
-- `Block2`: 资源数据块2（uint16 大端）
-- `Block3`: 资源数据块3（int16 大端）
-- `...`: 其他资源数据块（里面的数据类型自定义）
-- `Checksum`: 校验和，所有字节和 & 0xFF 的结果（含帧头 0xEE）
+| Codec | 名称 | Payload |
+| --- | --- | --- |
+| `0` | RAW | 完整原始像素数据。 |
+| `1` | RLE | 依次发送 `(值:u8, 重复次数:u8)`，压缩的是 RAW 字节。 |
+| `2` | HEATSHRINK | 全帧压缩。当前解码器使用窗口位数 `8`、前瞻位数 `4`。 |
+| `3` | Tile | 按网格发送变化的区块。 |
+| `4` | Patch | 发送覆盖变化区域的一个矩形。 |
+| `5` / `6` | Tile+HEATSHRINK / Patch+HEATSHRINK | 编号已定义，当前上位机不解码。 |
+| `7` | SparseBoundary | Binary1 / Gray8 底图加逐行边界。 |
+| `8` | CoordinateBoundary | Binary1 / Gray8 底图加带坐标空间的点列。 |
 
-这里给出默认例子：
+### Tile 和 Patch
 
-```
-┌─────┬──────────┬──────────┬──────────┬────────────┬────────────┬────────────┬──────────┐
-│ ID  │ Length   │ CPUUsage │ RAM      │ ROM        │ Speed      │ ServoAngle │ Checksum |
-├─────┼──────────┼──────────┼──────────┼────────────┼────────────┼────────────┼──────────┤
-│ 0xEE│ (2B)     │ (1B) %   │ (2B u16) │ (2B u16)   │ (2B i16)   │ (2B i16)   │ (1B)     |
-└─────┴──────────┴──────────┴──────────┴────────────┴────────────┴────────────┴──────────┘
-```
+Tile 的格式为 `Sum:u8 + CutInfo:u8 + (BlockID:u8 + Data) × Sum`。`CutInfo` 高 4 位是纵向块数，低 4 位是横向块数，两者均为 `1–15`。`BlockID` 从 `0` 开始，按行编号。当前解码器把宽、高分别除以块数后向下取整，发送端宜选能整除的网格，避免右边或底部的余边无法更新。
 
-**字段说明**:
-- `Length`: 资源数据字节数，这里是 $9B$（= CPU(1) + ROM(2) + RAM(2) + Speed(2) + Servo(2)）
-- `CPUUsage`: CPU 占用率（%，uint8，范围 0-100）
-- `RAM`: SRAM 剩余字节数（uint16 大端）；分母 `RAM_TOTAL` 在上位机 Settings -> Env 中配置
-- `ROM`: Flash 剩余字节数（uint16 大端）；分母 `ROM_TOTAL` 在上位机 Settings -> Env 中配置
-- `Speed`: 前进速度（mm/s，int16 大端，正=前进，负=后退）
-- `ServoAngle`: 舵机偏转角度（int16 大端，单位由 MCU 定义）
-- `Checksum`: 校验和，所有字节和 & 0xFF 的结果（含帧头 0xEE）
+Patch 的格式为 `x1:u8 + y1:u8 + x2:u8 + y2:u8 + Data`，包含左上角和右下角。`Data` 按行发送矩形内的原始像素。
 
-**总字节数**: 13B
+这两种编码当前按 Gray8（每像素 1 字节）或 RGB565（每像素 2 字节）使用。先发完整 RAW 参考帧，再发差分；每次差分解码完成后会更新参考帧。链路丢帧后，建议重新发送完整 RAW 帧，避免后续差分继续用旧图作底图。
 
+### Codec 7：SparseBoundary（MOD1）
 
-并且对于每个数据块得到的结果，在上位机中表示为：`Block[idx]` idx就是数据块的下标（0-base）  
-上位机显示的数据可用自定义计算结果，例如我设计的`Block[2]` 是传出MCU的ROM剩余字节数，但是我又想在host的图表中显示ROM的占用率，那么就可以通过`(ROM_TOTAL - Block[2]) / ROM_TOTAL`来计算 ，并填入 Setting -> Resources Frame -> ROM -> Expr 中，这里的`ROM_TOTAL`就是上位机中设置的ROM总大小，在Setting -> Env 添加环境变量。
-
-## 2.4 CLI 帧 (0xFF)
-
-**方向**：MCU → Host（单向，Host 不发此帧）
-
-**帧结构**：
-
-```
-┌─────┬────────┬──────────────┬──────────┐
-│ ID  │ Length │ Text         │ Checksum │
-├─────┼────────┼──────────────┼──────────┤
-│ 0xFF│ (2B)   │ (0-256B)     │ (1B)     │
-└─────┴────────┴──────────────┴──────────┘
+```text
+Payload = RAW 底图 + LineCount:u8 + (Color:u16BE + Count:u8 + X:u8 × Count) × LineCount
 ```
 
-**字段说明**：
-- `Length`: 文本字节数（uint16 大端，最大 256）
-- `Text`: UTF-8 编码的命令输出文本块，可含 `\n`、`\r\n`
-- `Checksum`: 所有字节和 & 0xFF（含帧头 0xFF）
+`Color` 为 RGB565。每个 X 对应一行，第一项的 Y 为 `0`；`0xFF` 表示该行不画点。`LineCount = 0` 表示只有底图。188×120 的 Gray8 底图附带 3 条各 120 点的线时，`Payload` 为 `22560 + 1 + 3 × 123 = 22930` 字节。
 
-**总字节数**: 4 + N（0~256）
+### Codec 8：CoordinateBoundary（MOD2）
 
----
-
-## 3. 校验和算法
-
-所有帧的校验和计算方式相同：将帧内**所有字节**（含帧头 ID 字节）逐一累加，取低 8 位。
-
-```
-checksum = (byte[0] + byte[1] + ... + byte[N-1]) & 0xFF
+```text
+Payload = RAW 底图 + LineCount:u8 + Line × LineCount
+Line    = Space:u8 + Color:u16BE + Count:u8 + (X:i16BE + Y:i16BE) × Count
 ```
 
-校验和字节本身不参与计算，位于帧末尾。
+`Space = 0` 表示原图坐标，`Space = 1` 表示逆透视（IPM）标定矩阵 `H` 输出的坐标。`Color` 为 RGB565。X、Y 都是有符号大端整数，不填画布偏移，也不沿用 Codec 7 的 `0xFF` 规则。无效点在发送端省略；`Count = 0` 表示该线在本帧没有点。每帧独立，即使没有点列也要发 `LineCount = 0`。
 
----
+MOD2 通常发送选中的红色左边界或蓝色右边界，再加绿色 IPM 中线。上位机在原图视图用 `H⁻¹` 回投 IPM 点；在 IPM 视图用 `H` 投影原图点，再加画布偏移。MCU 和上位机的 `H` 应一致，显示时的裁切和拉伸不改变线上坐标。
 
-## 4. 帧同步与错误恢复
+## 4. 日志帧 `0xDD`
 
-上位机解析时，以帧头字节（0xCC / 0xDD / 0xEE）作为同步标志：
+`Body` 是最多 256 字节的 UTF-8 文本。这里计的是编码后的字节数，不是字符数。日志和 CLI 应答使用不同的帧头，CLI 的执行状态不放在日志帧里。
 
-1. 逐字节扫描，遇到已知帧头则开始解析对应帧
-2. 若校验和不匹配，丢弃该帧，继续向后扫描下一个帧头
-3. 未知字节直接跳过
+## 5. 资源帧 `0xEE`
 
----
+帧内没有字段名或类型标记。MCU 按约定顺序写入字段，上位机根据 Settings → Resources 的配置解释它们。多字节整数用大端序。默认 `Length = 9`（整帧 13 字节）：
 
-## 5. 时序与帧率
+| 表达式引用 | 字段 | 类型 | 默认含义 |
+| --- | --- | --- | --- |
+| `res[0]` | CPU | `u8` | CPU 占用率，单位 `%`。 |
+| `res[1]` | RAM | `u16BE` | SRAM 剩余量，单位字节。 |
+| `res[2]` | ROM | `u16BE` | Flash 剩余量，单位字节。 |
+| `res[3]` | Speed | `i16BE` | 速度，单位 mm/s，界面默认换算为 m/s。 |
+| `res[4]` | Servo | `i16BE` | 舵机角度，界面默认除以 10，显示为度。 |
 
-### 5.1 Host 端行为
+自定义布局时，MCU 与上位机的字段顺序、类型和总长度都要一致。资源表达式引用用 `res[n]`，例如 ROM 占用率是 `(ROM_TOTAL-res[2])/ROM_TOTAL*100`。`ROM_TOTAL` 和 `RAM_TOTAL` 在 Settings → Env 中配置，单位应与剩余量一致。
 
-**Host 不设帧率上限。** Host 只按帧头逐帧解析，MCU 发多快它就收多快。帧率达到什么水平完全取决于 MCU 的渲染能力 + 串口带宽，与 Host 无关。
+## 6. CLI 双向通信
 
-### 5.2 实际帧率
+上位机发命令时直接发送 UTF-8 文本，以 `\n`（`0x0A`）结束，例如 `set_speed 100\n`。这一路不加帧头、长度或校验和。MCU 按行接收，在相同连接上用 `0xFF` 帧返回输出：
 
-帧率完全由 MCU 端决定，Host 不设任何限制：
-
-- **USB-CDC**：虚拟波特率，实际带宽为数 Mbps，小帧（<1KB）的传输时间可忽略不计。瓶颈在 MCU 渲染速度，不在传输。实测 64×64 1bpp 可达 150+ FPS。
-- **物理 UART / 无线串口**：带宽受限于实际波特率。115200 bps 下，188×120 RGB565（~22KB）纯传输约 2 秒，是大帧的真正瓶颈。
-
-> **实际 FPS = MCU 渲染时间 + 传输时间（UART 下显著，CDC 下可忽略）。** Host 只被动解析，帧率变化对它透明。
-
-### 5.3 动态帧率（FreeRTOS）
-
-使用 RTOS 时，帧率可以**自适应系统负载**：
-
-- **`vTaskDelayUntil(tick, floor)`**：设短地板（如 5ms），实际帧率由渲染+传输时间自然决定。场景简单→帧率自动上升；场景复杂→自动下降。
-- **事件驱动暂停**：`ulTaskNotifyTake()` 深度阻塞，暂停期间 CPU 利用率为 0；`xTaskNotifyGive()` 微秒级唤醒。
-- **TX 反压**：当 `Serial` 缓冲区满时 `write()` 自然阻塞 → 任务让出 CPU → 其他任务获得时间片。
-
-Host 端始终无感知——它只看到帧来得快或慢，不需要任何协议层面的流控字段。
-
-图传帧体积远大于其他帧，MCU 端建议使用异步/DMA 发送以避免阻塞。
-
----
-
-## 6. 上位机解析伪代码
-
-```python
-while True:
-    byte = read_byte()
-
-    if byte == 0xCC:          # 图传帧
-        length    = read_uint16_be()   # 帧头后总字节数
-        frame_id  = read_uint16_be()
-        width     = read_uint8()
-        height    = read_uint8()
-        format    = read_uint8()
-        pixel_fmt = (format >> 4) & 0x0F   # 高4位: PixelFormat
-        codec     = format & 0x0F           # 低4位: Codec
-        # Payload 字节数 = length - 5 (已读 Frame+Width+Height+Format)
-        payload_size = length - 5
-        payload  = read_bytes(payload_size)
-        checksum = read_uint8()
-        # 验证校验和
-
-        # 解码
-        raw = None
-        if codec == 0:       # RAW
-            raw = payload
-        elif codec == 1:     # RLE
-            raw = rle_decode(payload, width, height, pixel_fmt)
-        elif codec == 2:     # HEATSHRINK
-            raw = heatshrink_decompress(payload)
-        elif codec == 3:     # Tile (P帧，无熵编码)
-            raw = tile_decode(payload, last_i_frame)
-        elif codec == 4:     # Patch (P帧，无熵编码)
-            raw = patch_decode(payload, last_i_frame)
-        elif codec == 5:     # Tile+HEATSHRINK (P帧，复合)
-            raw = tile_decode(heatshrink_decompress(payload), last_i_frame)
-        elif codec == 6:     # Patch+HEATSHRINK (P帧，复合)
-            raw = patch_decode(heatshrink_decompress(payload), last_i_frame)
-
-        if raw is not None:
-            last_i_frame = raw  # 缓存为下一 P 帧的参考帧
-            display(raw, width, height, pixel_fmt)
-
-    elif byte == 0xDD:        # 日志帧
-        length    = read_uint16_be()
-        log_data  = read_bytes(length)
-        checksum  = read_uint8()
-        # 验证校验和后输出 UTF-8 文本
-
-    elif byte == 0xEE:        # 资源帧
-        length    = read_uint16_be()
-        data      = read_bytes(length)
-        checksum  = read_uint8()
-        # 根据 Settings -> Resources 配置的 slot 列表动态解析 data
-        # 例如配置为 [u8, u16, u16, i16, i16] 则：
-        #   cpu = data[0]
-        #   rom = (data[1]<<8) | data[2]
-        #   ram = (data[3]<<8) | data[4]
-        #   speed = int16_from_be(data[5:7])
-        #   servo = int16_from_be(data[7:9])
-
-    elif byte == 0xFF:        # CLI 输出帧
-        length    = read_uint16_be()
-        flags     = read_uint8()
-        text      = read_bytes(length - 1).decode('utf-8')
-        checksum  = read_uint8()
-        # 验证校验和后，将 text 流式追加到上位机 CLI 终端输出区
-        # flags & 0x01 == 1 表示命令结束，显示输入提示符
-        cli_output_append(text, done=(flags & 0x01))
+```text
+Body = Flags:u8 + Text:UTF-8
+Length = 1 + Text 字节数
+整帧长度 = 5 + Text 字节数
 ```
 
----
+| Flags | 含义 |
+| --- | --- |
+| `0x00` | 还有输出。 |
+| `0x01` | 命令结束。 |
+| `0x02` | 出错标志。若命令已结束，发送 `0x03`。 |
+| `0x03` | 出错且命令结束。 |
 
-## 2.4 CLI 帧 (0xFF)
-
-**方向**：MCU → Host（单向，Host 不发此帧）
-
-**帧结构**：
-
-```
-┌─────┬────────┬───────┬──────────────┬──────────┐
-│ ID  │ Length │ Flags │ Text         │ Checksum │
-├─────┼────────┼───────┼──────────────┼──────────┤
-│ 0xFF│ (2B)   │ (1B)  │ (0-255B)     │ (1B)     │
-└─────┴────────┴───────┴──────────────┴──────────┘
-```
-
-**字段说明**：
-- `Length`: Flags + Text 的总字节数（uint16 大端，最小 1）
-- `Flags`: 执行状态标志（uint8）
-
-  | 值 | 名称 | 说明 |
-  |----|------|------|
-  | `0x00` | CONT | 命令仍在执行，后续还有输出 |
-  | `0x01` | END  | 命令执行完毕 |
-  | `0x02` | ERR  | 命令执行出错（可与 END 组合：`0x03`） |
-
-- `Text`: UTF-8 编码的输出文本块，可含 `\n`、`\r\n`，可为空（仅发 Flags）
-- `Checksum`: 所有字节和 & 0xFF（含帧头 0xFF）
-
-**总字节数**: 4 + N（N = 0–255）
-
----
-
-## 7. CLI 通信机制
-
-### 7.1 Host → MCU（命令发送）
-
-Host 直接发送原始 UTF-8 字节，**不封装帧**：
-
-```
-<command> <args...>\n
-```
-
-- 以 `\n`（0x0A）结尾作为命令终止符
-- MCU 端通过 UART 中断或 DMA 接收，按 `\n` 分割解析命令
-- 命令格式：`函数名 [参数...]`，空格分隔，例如 `set_speed 100`、`get_status`
-
-### 7.2 MCU → Host（应答输出）
-
-MCU 执行命令后，通过 **0xFF 帧**返回输出：
-
-- 每帧携带 `Flags` 字节，Host 据此控制终端输入行的显示
-- `CONT`（0x00）：命令仍在执行，Host 隐藏输入提示符，继续追加输出
-- `END`（0x01）：命令完成，Host 显示输入提示符，允许下一条命令
-- `ERR`（0x02）或 `END|ERR`（0x03）：命令出错，Host 可高亮显示
-- 每帧 Text 最多 255 字节，长输出自动分帧；可发仅含 Flags 的空文本帧作为结束信号
-- 0xFF 帧与其他遥测帧（0xCC/0xDD/0xEE）混合传输，互不干扰
-
-### 7.3 MCU 端实现要点
+上位机用最低位判断命令是否结束。发送端每帧文本建议不超过 255 字节；长输出分多帧时，在 UTF-8 字符边界拆分，因为上位机逐帧解码。也可以发送一个只有 `Flags = 0x01` 的空文本帧来结束。以下 MCU 示例接收已经切好的完整文本片段；如果还有其他任务在发遥测，请把整个帧交给同一个发送队列。
 
 ```c
-#define CLI_CONT 0x00
-#define CLI_END  0x01
-#define CLI_ERR  0x02
-
-void cli_send(const char *text, uint8_t flags) {
-    uint16_t tlen = strlen(text);
-    if (tlen > 255) tlen = 255;
-    uint16_t length = 1 + tlen;  // Flags(1) + Text
-    uint8_t hdr[3] = { 0xFF, (uint8_t)(length >> 8), (uint8_t)(length & 0xFF) };
-    uint8_t cs = 0;
-    for (int i = 0; i < 3; i++) cs += hdr[i];
-    cs += flags;
-    for (uint16_t i = 0; i < tlen; i++) cs += (uint8_t)text[i];
-    uart_write(hdr, 3);
-    uart_write(&flags, 1);
-    uart_write((uint8_t*)text, tlen);
-    uart_write(&cs, 1);
+void cli_send_chunk(const uint8_t *text, uint16_t size, uint8_t flags) {
+    if (size > 255) return;
+    uint16_t length = 1 + size;
+    uint8_t frame[260] = {0xFF, (uint8_t)(length >> 8), (uint8_t)length, flags};
+    uint8_t checksum = frame[0] + frame[1] + frame[2] + frame[3];
+    for (uint16_t i = 0; i < size; ++i) {
+        frame[4 + i] = text[i];
+        checksum += text[i];
+    }
+    frame[4 + size] = checksum;
+    uart_write(frame, 5 + size);
 }
 ```
 
----
+## 7. 联调样例
 
-## 8. TODO / 未来优化
+下列是完整帧，最后一字节为校验和：
 
-### 8.2 Tile 编码用于灰度/二值图
+| 用途 | 十六进制字节 |
+| --- | --- |
+| 2×2 Gray8 RAW，帧号 1 | `CC 00 09 00 01 02 02 10 00 40 80 FF A9` |
+| 日志 `OK` | `DD 00 02 4F 4B 79` |
+| 默认资源帧：CPU 25%，RAM 1024 B，ROM 2048 B，速度 1000 mm/s，舵机 −10° | `EE 00 09 19 04 00 08 00 03 E8 FF 9C A2` |
+| CLI 返回 `OK` 并结束 | `FF 00 03 01 4F 4B 9D` |
+| CLI 直接结束，不带文本 | `FF 00 01 01 01` |
 
-Gray8/Binary1 + Tile 变化检测（类似现有 RGB565 Tile），P 帧仅发送变化的灰度/二值块。
-- Gray8: 每块 12×12×1 = 144B（vs RGB565 的 288B，减半）
-- Binary1: 每块 12×12/8 = 18B（vs RGB565 的 288B，**16 倍压缩**）
-- 结合 SparseBoundary: P 帧 = 变化块 + 变化边界线，极致省带宽
-
----
-
-**文档版本**: 3.5
-**更新日期**: 2026-05-29
+协议没有固定帧率。物理 UART 使用 8N1 时，每个字节在线路上占 10 位。188×120 的 RGB565 RAW 整帧是 45129 字节，在 115200 bps 下仅发送就约需 3.9 秒。若串口图传太慢，可以先换灰度或二值图，也可以降低采集频率，避免大图传帧挤占日志和 CLI 输出。
