@@ -18,38 +18,11 @@
 - **录制和回放**： bin 文件保存 MCU 原始输出数据，支持离线回放与 Hex 分析
 - **命令发送**： 向 MCU 发送控制指令（CLI）
 
-## 协议规范
+## 通信协议
 
-三路混合协议在**单条 UART** 上传输（8N1）：
+USB-CDC、UART 和 Wi‑Fi TCP 共用一套二进制帧。MCU 发来的图像、日志、资源数据和 CLI 应答分别用 `0xCC`、`0xDD`、`0xEE`、`0xFF` 标识。上位机下发 CLI 命令时直接发送以 `\n` 结尾的 UTF-8 文本。
 
-```
-┌────────┬──────────┬─────────────────────┬──────┐
-│ Sync   │ Length   │ Body                │ CS   │
-│ 1B     │ 2B (BE)  │ N bytes             │ 1B   │
-└────────┴──────────┴─────────────────────┴──────┘
-CS = Σ(Sync + Length + Body) & 0xFF
-```
-
-| 帧类型 | Sync | Body 结构 | 典型频率 |
-|--------|------|-----------|---------|
-| 图传 | 0xCC | FrameID(2B) + W(1B) + H(1B) + Format(1B) + Payload | 硬件决定¹ |
-| 日志 | 0xDD | UTF-8 文本 (≤ 256B) | ≤ 5 Hz |
-| 资源 | 0xEE | CPU(1B) + RAM(2B) + ROM(2B) + Speed(2B) + Servo(2B) | ≤ 5 Hz |
-| CLI | 0xFF | Flags(1B) + UTF-8 文本 (≤ 255B) | 按需 |
-
-> ¹ **Host 不设帧率上限。** 实际 FPS = MCU 渲染 + 传输时间。USB-CDC 下小帧传输可忽略，瓶颈在渲染；物理 UART 下大帧带宽可能成为瓶颈。FreeRTOS 可做动态帧率——场景简单时自动快、复杂时自动慢，Host 零改动。
-
-**Format 字节**：高 4 位 = PixelFormat，低 4 位 = Codec
-
-| PixelFormat | 值 | 说明 | Codec | 值 | 说明 |
-|-------------|------|------|-------|------|------|
-| Binary1 | 0 | 1bpp 二值化 | RAW | 0 | 无压缩 |
-| Gray8 | 1 | 8bpp 灰度 | RLE | 1 | 游程编码 |
-| RGB565 | 2 | 16bpp 彩色 | HeatShrink | 2 | LZ 压缩 |
-| RGB888 | 3 | 24bpp 真彩 | Tile | 3 | 分块变化检测 |
-| YUV422 | 4 | 16bpp 色度抽样 | Patch | 4 | 矩形变化检测 |
-
-详见 [telemetry_protocol.md](docs/telemetry_protocol.md)
+固件接入请看[遥测协议与联调样例](docs/telemetry_protocol.md)，其中列出了字段顺序、校验和、MOD1 / MOD2 点列和完整的十六进制帧。
 
 ## 项目结构
 
