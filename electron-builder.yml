@@ -1,0 +1,23 @@
+appId: com.theia.monitor
+productName: Theia Monitor
+directories:
+  output: release
+files:
+  - dist/**/*
+  - '!dist/**/*.map'
+  - electron/main.cjs
+  - electron/preload.cjs
+  - electron/tcp.cjs
+  - electron/icon.ico
+  - '!node_modules/**/*'
+npmRebuild: false
+win:
+  icon: electron/icon.ico
+  target:
+    - nsis
+    - portable
+nsis:
+  artifactName: Theia-Monitor-${version}-${arch}-setup.${ext}
+  perMachine: false
+portable:
+  artifactName: Theia-Monitor-${version}-${arch}-portable.${ext}

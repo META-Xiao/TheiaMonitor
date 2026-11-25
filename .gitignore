@@ -1,12 +1,12 @@
 # 依赖
 node_modules/
-package-lock.json
 yarn.lock
 pnpm-lock.yaml
 
 # 编译输出
 dist/
 build/
+release/
 *.tsbuildinfo
 
 # 编辑器
@@ -34,9 +34,6 @@ coverage/
 *.tmp
 *.temp
 .cache/
-
-# Tauri
-src-tauri/target/
 
 # Android / Capacitor
 android/build/

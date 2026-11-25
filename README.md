@@ -82,16 +82,21 @@ src/
 ## 快速开始
 
 ```bash
-npm install
-npm run vite       # 浏览器开发
-npm run front      # 浏览器模拟数据演示
-npm run build:web  # 构建浏览器版
-npm run preview    # 预览浏览器构建
-npm run test       # 运行测试
-npm run dev        # Tauri 桌面开发（需要 Rust/Cargo）
-npm run build      # Tauri 桌面打包
-npm run cap:sync   # 打包 APK
+npm ci
+npm run web        # 启动网页开发服务器
+npm test           # 运行测试
+npm run dev        # 启动 Electron 桌面开发窗口
+npm run build      # 生成 Windows x64 安装版和免安装版 EXE
+npm run cap:sync   # 构建网页并同步到 Android 工程
 ```
+
+网页演示可以用 `npm run web -- --mode front` 加载模拟数据。
+
+Windows 桌面开发和打包使用 Node.js 22（具体版本见 `.node-version`），无需安装 Rust、Cargo 或 Visual Studio C++ Build Tools。首次运行桌面开发或打包时需要联网下载 Electron 运行时及打包工具。
+
+Windows 打包结果在 `release/`：`*-setup.exe` 是当前用户安装版，`*-portable.exe` 可直接运行。也可以在 GitHub Actions 手动运行 **Build Windows EXE**，下载生成的构建产物。仓库默认不提供代码签名证书，Windows 可能对未签名的程序显示提示。
+
+桌面版可在应用内选择 USB-CDC / UART 串口。使用 WiFi 时，应用会监听填写的 TCP 端口；MCU 应连接到电脑的局域网 IP 和该端口。若 Windows 防火墙提示，请只在可信的专用网络上允许访问。
 
 ## 开发进度
 

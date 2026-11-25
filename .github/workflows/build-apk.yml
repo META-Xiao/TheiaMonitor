@@ -12,7 +12,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version-file: .node-version
 
       - uses: actions/setup-java@v4
         with:
@@ -21,9 +21,8 @@ jobs:
 
       - uses: android-actions/setup-android@v3
 
-      - run: npm install
-      - run: npm run build
-      - run: npx cap sync android
+      - run: npm ci
+      - run: npm run cap:sync
 
       - name: Build debug APK
         working-directory: android

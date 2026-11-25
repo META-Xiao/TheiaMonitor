@@ -184,7 +184,7 @@ export function useTelemetry() {
     if (refCount++ === 0) {
       logManager.start();
       imageManager.start();
-      /* 仅 npm run front 启用 mock; npm run dev (tauri) 走真实数据 */
+      /* 模拟数据仅在网页的 front 模式启用。 */
       if (import.meta.env.MODE === 'front') {
         stopMock = startFrontendMock(serialManager);
       }
